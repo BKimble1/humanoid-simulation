@@ -34,6 +34,7 @@ const _y = new Float64Array(6);
 const _w = new Float64Array(6);
 const _L = new Float64Array(36);
 const _t = new Float64Array(8);
+const _q0 = new Float64Array(8);
 const _R = new Matrix3();
 
 export interface LegIKResult {
@@ -142,6 +143,10 @@ export interface ArmIKOptions {
   damping?: number;
   /** Include the waist yaw in the chain. */
   useWaist?: boolean;
+  /** What the arm's redundancy settles toward: a natural resting arm (default), or where the
+   * arm already is ('current': the least change, for an arm tracking a moving target frame by
+   * frame, which must not drift between two equally good postures). */
+  prefer?: 'rest' | 'current';
 }
 
 export interface ArmIKResult {
@@ -180,6 +185,8 @@ export function solveArm(pose: Pose, side: Side, target: Vector3, kin: Kinematic
   let angErr = 0;
   const qTmp = _q;
   const cur = _cur;
+  const current = opts.prefer === 'current';
+  for (let c = 0; c < n; c++) _q0[c] = pose.q[idx[c]];
   for (; iter < iterations; iter++) {
     kin.update(pose);
     kin.point(hand, PALM_POINT, p);
@@ -232,7 +239,7 @@ export function solveArm(pose: Pose, side: Side, target: Vector3, kin: Kinematic
     }
     // posture in the null space (approximate projector with the damped pseudo-inverse)
     const z = _z;
-    for (let c = 0; c < n; c++) z[c] = 0.08 * (rest[c] * DEG - pose.q[idx[c]]);
+    for (let c = 0; c < n; c++) z[c] = 0.08 * ((current ? _q0[c] : rest[c] * DEG) - pose.q[idx[c]]);
     const Jz = _Jz;
     for (let i = 0; i < m; i++) {
       let sum = 0;

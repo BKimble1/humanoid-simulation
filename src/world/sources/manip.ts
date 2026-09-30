@@ -21,9 +21,9 @@ import { Quaternion, Vector2, Vector3 } from 'three';
 import { DIM, type JointId, type Side } from '../../spec/body';
 import { GRAVITY } from '../../spec/motion';
 import { GraspSim, OBJECTS } from '../../engine/grasp';
-import { solveArm } from '../../engine/ik';
+import { ARM_JOINTS, solveArm } from '../../engine/ik';
 import type { RobotModel } from '../../engine/robot';
-import { DEG, Kinematics, Pose } from '../../engine/skeleton';
+import { DEG, JOINT_INDEX, Kinematics, Pose } from '../../engine/skeleton';
 import { solvePosture, standHeight } from '../../engine/wholebody';
 import { CART, ITEMS, SHELF_SPOT, type ItemId } from '../cart';
 import { bothHands, relax } from '../handPose';
@@ -44,6 +44,8 @@ const quintic = (u: number) => {
 
 /** Palm orientation for a side grasp: fingers forward and a little down, thumb up. */
 const GRASP_QUAT = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -68 * DEG);
+const ARM_IDX: Record<Side, number[]> = { L: ARM_JOINTS('L').map((id) => JOINT_INDEX[id]), R: ARM_JOINTS('R').map((id) => JOINT_INDEX[id]) };
+
 /** How much the slip is magnified in the drawing (it is millimetres). */
 export const SLIP_SHOWN = 4;
 
@@ -91,6 +93,10 @@ export class ManipSource implements PoseSource {
   private stance = new StanceKeeper();
   private leaving = false;
   private scratch = new Pose();
+  /** Each arm's last solution (joint angles), where the next frame's IK starts: a warm start
+   * follows the moving target smoothly, where a cold start from the resting arm would converge
+   * a little differently every frame (a visible chatter at the elbow). */
+  private warm: Record<Side, number[] | null> = { L: null, R: null };
 
   constructor(
     private model: () => RobotModel,
@@ -116,6 +122,7 @@ export class ManipSource implements PoseSource {
   enter(from: DisplayState) {
     this.pose.copy(from.pose);
     this.leaving = false;
+    this.warm = { L: null, R: null };
     this.kin.update(from.pose);
     const com = this.model().com(this.kin);
     this.stance.begin(from.feet, homeStance(), new Vector2(com.x, com.z));
@@ -364,14 +371,19 @@ export class ManipSource implements PoseSource {
       this.restQ[side].setFromRotationMatrix(this.kin.frames.get(`${side}_hand`)!);
     }
     // arms along the path (a retracting arm hands back to the resting posture as it arrives)
-    if (stage !== 'rest') {
+    if (stage === 'rest') this.warm = { L: null, R: null };
+    else {
       for (const side of hands) {
         const hold = stage === 'close' || stage === 'hold';
         const target = _t.copy(this.from[side]).lerp(this.to[side], hold ? 1 : uu);
         const q = _q.copy(this.fromQ[side]).slerp(this.toQ[side], hold ? 1 : uu);
         const wArm = stage === 'retract' || stage === 'dropped' ? 1 - uu : 1;
         this.scratch.copy(this.pose);
-        solveArm(this.scratch, side, target, this.kin, { iterations: 22, orientation: q });
+        const arm = ARM_IDX[side];
+        const w = this.warm[side];
+        if (w) for (let k = 0; k < arm.length; k++) this.scratch.q[arm[k]] = w[k];
+        solveArm(this.scratch, side, target, this.kin, { iterations: 22, orientation: q, prefer: 'current' });
+        this.warm[side] = arm.map((j) => this.scratch.q[j]);
         for (let i = 0; i < this.pose.q.length; i++) this.pose.q[i] += (this.scratch.q[i] - this.pose.q[i]) * wArm;
       }
     }

@@ -158,6 +158,7 @@ test('pick and place with one hand and with two: no stage-boundary jump, the obj
   }
   const t = await telemetry(page);
   expectWithin(t.samples, 'jv', 4.5, 'joints');
+  expectWithin(t.samples, 'ja', 90, 'joints (no IK chatter)');
   expectWithin(t.samples, 'hv', 3.5, 'hands');
   expectWithin(t.samples, 'ov', 1.0, 'objects');
   expectWithin(t.samples.filter((x) => x.attach >= 0), 'attach', 0.002, 'held object');

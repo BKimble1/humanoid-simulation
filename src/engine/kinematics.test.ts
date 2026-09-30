@@ -1,7 +1,7 @@
 import { Quaternion, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DIM, HIP_HEIGHT } from '../spec/body';
-import { ankleFromSole, solveArm, solveLeg } from './ik';
+import { PALM_POINT, ankleFromSole, solveArm, solveLeg } from './ik';
 import { RobotModel } from './robot';
 import { DEG, Kinematics, Pose, SEGMENTS, restPose } from './skeleton';
 
@@ -101,6 +101,27 @@ describe('arm inverse kinematics', () => {
     const r = solveArm(p, 'L', new Vector3(0.3, 1.3, 1.4), kin);
     expect(r.reached).toBe(false);
     expect(r.error).toBeGreaterThan(0.5);
+  });
+
+  it("with prefer: 'current', a target the hand is already near moves the arm only a little", () => {
+    const kin = new Kinematics();
+    const p = restPose();
+    p.pelvisPos.set(0, 0.9, 0);
+    p.set('L_elbow', 40 * DEG);
+    p.set('L_shoulder_pitch', 20 * DEG);
+    kin.update(p);
+    const hand = kin.point('L_hand', PALM_POINT).add(new Vector3(0.004, 0, 0));
+    const q = kin.frames.get('L_hand')!;
+    const orientation = new Quaternion().setFromRotationMatrix(q);
+    const before = Array.from(p.q);
+    const cur = p.clone();
+    solveArm(cur, 'L', hand, kin, { orientation, prefer: 'current' });
+    const rest = p.clone();
+    solveArm(rest, 'L', hand, kin, { orientation });
+    const moved = (x: typeof p) => Math.max(...Array.from(x.q).map((v, i) => Math.abs(v - before[i])));
+    // 4 mm of reach needs well under a degree at every joint; the default pulls toward its rest arm
+    expect(moved(cur)).toBeLessThan(1 * DEG);
+    expect(moved(cur)).toBeLessThan(moved(rest));
   });
 
   it('keeps every joint inside its limits', () => {

@@ -89,7 +89,9 @@ export class Stage {
     this.ao = null;
     if (spec.ao || spec.bloom) {
       this.renderer.toneMapping = NoToneMapping;
-      const composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType, multisampling: spec.msaa });
+      // recordings (software renderer, frame by frame) use SMAA: the same edges for a quarter of the fill
+      const msaa = CAPTURE ? 0 : spec.msaa;
+      const composer = new EffectComposer(this.renderer, { frameBufferType: HalfFloatType, multisampling: msaa });
       composer.addPass(new RenderPass(this.scene, this.camera));
       if (spec.ao) {
         const ao = new N8AOPostPass(this.scene, this.camera, this.width, this.height);
@@ -107,7 +109,7 @@ export class Stage {
       if (spec.bloom) effects.push(new BloomEffect({ intensity: 0.35, luminanceThreshold: 0.92, luminanceSmoothing: 0.2, mipmapBlur: true, radius: 0.55 }));
       effects.push(new ToneMappingEffect({ mode: ToneMappingMode.AGX }));
       effects.push(new VignetteEffect({ offset: 0.32, darkness: 0.42 }));
-      if (!spec.msaa) effects.push(new SMAAEffect({ preset: SMAAPreset.HIGH }));
+      if (!msaa) effects.push(new SMAAEffect({ preset: SMAAPreset.HIGH }));
       composer.addPass(new EffectPass(this.camera, ...effects));
       this.composer = composer;
     } else {

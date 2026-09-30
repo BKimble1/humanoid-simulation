@@ -13,7 +13,7 @@ const SITE_URL = process.env.SITE_URL;
 
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 300_000,
+  timeout: 600_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,
   workers: 1,
@@ -31,7 +31,7 @@ export default defineConfig({
         command: 'npm run build && npm run preview -- --port 4174 --strictPort',
         url: 'http://127.0.0.1:4174',
         reuseExistingServer: true,
-        timeout: 300_000,
+        timeout: 600_000,
       },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },

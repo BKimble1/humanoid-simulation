@@ -40,6 +40,7 @@ export class Stage {
   /** Draw calls and triangles of the last frame (diagnostics and tests). */
   stats = { calls: 0, triangles: 0 };
   exposure = 1;
+  onResize?: (w: number, h: number) => void;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -122,6 +123,7 @@ export class Stage {
     this.renderer.setSize(this.width, this.height, false);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
+    this.onResize?.(this.width, this.height);
     this.composer?.setSize(this.width, this.height);
     this.ao?.setSize(this.width, this.height);
   }

@@ -72,6 +72,8 @@ export class RobotRig {
   private jointGroups: { g: Group; axis: Vector3; origin: Vector3 }[] = [];
   meshes: RobotMesh[] = [];
   parts = new Map<string, Object3D>();
+  /** Placement of each separately built actuator exterior in its holder's frame. */
+  partFrames = new Map<string, Matrix4>();
   /** Named points on the robot (for labels, camera framing, overlays), per segment. */
   anchors = new Map<string, { seg: SegmentId; local: Vector3 }>();
   private pending = new Map<string, Pending>();

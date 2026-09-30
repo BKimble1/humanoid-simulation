@@ -52,6 +52,7 @@ export function placeActuator(p: ActuatorPlacement) {
   const mc = m.clone().premultiply(new Matrix4().makeTranslation(-p.jointOrigin.x, -p.jointOrigin.y, -p.jointOrigin.z));
   if (p.part) {
     const hold = p.rig.holder(p.seg, p.part);
+    p.rig.partFrames.set(p.part, m.clone());
     for (const pc of ext.housing) p.rig.addTo(hold, p.seg, pc.look, 'actuator', pc.geo, p.part, m);
     const out = p.rig.holder(p.child, `${p.part}:out`);
     for (const pc of ext.output) p.rig.addTo(out, p.child, pc.look, 'actuator', pc.geo, `${p.part}:out`, mc);

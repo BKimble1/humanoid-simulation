@@ -92,6 +92,7 @@ export function buildLeg(rig: RobotRig, side: Side, scale: LimbScale) {
   const kneeM = alongAxis(new Vector3(-s, 0, 0), kneeAxisPos.clone().add(new Vector3(s * kneeExt.length, 0, 0)));
   const kneePart = side === 'L' ? 'act:L_knee' : `act:${side}_knee_body`;
   const kneeHold = rig.holder(thigh, kneePart);
+  rig.partFrames.set(kneePart, kneeM.clone());
   for (const pc of kneeExt.housing) rig.addTo(kneeHold, thigh, pc.look, 'actuator', pc.geo, kneePart, kneeM);
   // the output flange and crank rotate about the actuator axis with the knee angle
   const crankTop = new Group();
@@ -99,7 +100,7 @@ export function buildLeg(rig: RobotRig, side: Side, scale: LimbScale) {
   crankTop.position.copy(kneeAxisPos);
   rig.seg.get(thigh)!.add(crankTop);
   const toCrank = new Matrix4().makeTranslation(-kneeAxisPos.x, -kneeAxisPos.y, -kneeAxisPos.z).multiply(kneeM);
-  for (const pc of kneeExt.output) rig.addTo(crankTop, thigh, pc.look, 'actuator', pc.geo, `${side}_knee_out`, toCrank);
+  for (const pc of kneeExt.output) rig.addTo(crankTop, thigh, pc.look, 'actuator', pc.geo, side === 'L' ? 'act:L_knee:out' : `${side}_knee_out`, toCrank);
   const crankArm = (look: 'anodized' | 'aluBright') => {
     const g = new RoundedBoxGeometry(0.008, 0.026, KNEE_CRANK + 0.026, 2, 0.004).translate(0, 0, -KNEE_CRANK / 2);
     return { g, look };

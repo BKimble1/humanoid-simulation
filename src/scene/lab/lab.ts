@@ -249,17 +249,22 @@ export class Lab {
     walls.add(right);
     // vertical panel seams on the back wall
     const seams: ReturnType<typeof BoxGeometry.prototype.clone>[] = [];
-    for (let x = -10; x <= 10; x += 1.2) seams.push(new BoxGeometry(0.015, 6, 0.02).translate(x, 3, -6.49));
+    for (let x = -10; x <= 10; x += 1.2) {
+      if (x > -6.6 && x < 0.2) {
+        // around the window: seams above and below it only
+        seams.push(new BoxGeometry(0.015, 1.3, 0.02).translate(x, 0.75, -6.49), new BoxGeometry(0.015, 3.1, 0.02).translate(x, 4.35, -6.49));
+      } else seams.push(new BoxGeometry(0.015, 6, 0.02).translate(x, 3, -6.49));
+    }
     walls.add(new Mesh(mergeGeometries(seams), new MeshStandardMaterial({ color: '#0d0e10', roughness: 0.9 })));
     // control-room window: dark glass with warm, dim interior light
-    const win = new Mesh(new PlaneGeometry(6.5, 1.3), new MeshBasicMaterial({ color: new Color('#2a2118') }));
+    const win = new Mesh(new PlaneGeometry(6.5, 1.3), new MeshBasicMaterial({ color: new Color('#1d1814') }));
     win.position.set(-3.2, 2.1, -6.47);
     walls.add(win);
     const winFrame = new Mesh(new BoxGeometry(6.7, 1.5, 0.04).translate(-3.2, 2.1, -6.49), new MeshStandardMaterial({ color: '#0a0b0c', roughness: 0.6 }));
     walls.add(winFrame);
     // light strips: soft vertical LED bars on the back wall
-    const stripMat = new MeshBasicMaterial({ color: new Color('#cfd8ea').multiplyScalar(0.9) });
-    for (const x of [2.4, 5.8, -7.6]) {
+    const stripMat = new MeshBasicMaterial({ color: new Color('#cfd8ea').multiplyScalar(0.55) });
+    for (const x of [3.4, 6.2]) {
       const s = new Mesh(new BoxGeometry(0.06, 3.6, 0.02), stripMat);
       s.position.set(x, 2.2, -6.45);
       walls.add(s);
@@ -322,7 +327,7 @@ export class Lab {
 
     // lights
     this.key = new SpotLight(new Color('#fff3e4'), 150, 0, 0.5, 0.9, 2);
-    this.key.position.set(-2.6, 5.4, 3.8);
+    this.key.position.set(-0.9, 5.6, 4.3);
     this.key.target.position.set(0, 0.9, 0);
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(2048, 2048);

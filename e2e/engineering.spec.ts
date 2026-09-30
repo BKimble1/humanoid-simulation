@@ -15,6 +15,13 @@ test('walking: feet carry the weight, power and cost of transport are plausible'
   // ground reaction ≈ weight on average; the battery supplies a few hundred watts
   expect(Number(r.batteryW)).toBeGreaterThan(150);
   expect(Number(r.batteryW)).toBeLessThan(1200);
+  // power averaged over the last strides: cost of transport and runtime from the same number
+  const cot = Number(r.batteryAvgW) / (Number(r.totalMass) * 9.81 * 1.0);
+  expect(cot).toBeGreaterThan(0.4);
+  expect(cot).toBeLessThan(1.2);
+  expect(Number(r.runtimeH)).toBeGreaterThan(3);
+  expect(Number(r.runtimeH)).toBeLessThan(7);
+  expect(Math.round(Number(r.wCadence))).toBe(125);
   expect(Number(r.hottestC)).toBeLessThan(120);
   await lab(page, { walking: false });
   await advance(page, 30 * 4);

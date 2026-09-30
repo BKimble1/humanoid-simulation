@@ -120,7 +120,8 @@ saturation); a fast 20 kg lift at 30 : 1 hits the 80 A current limit.
 - Power at the battery = Σ joint electrical power / 0.97 (drives) + 1.2 W standby per drive +
   low-voltage loads (perception computer, real-time controller, sensors, network, fans) / 0.92
   (isolated DC/DC). Regenerated power (a joint braking) returns to the bus.
-- Runtime = usable energy / average power.
+- Runtime = usable energy / average power (live in the labs: battery power averaged over the
+  last 3 s, a few strides when walking).
 
 Results (default design): standing ≈ 152 W → 12.7 h; walking 1.0 m/s ≈ 444 W → 4.4 h;
 mixed work ≈ 6.5 h. With 20 kg carried at 0.5 m/s: 535 W.

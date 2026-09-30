@@ -96,8 +96,11 @@ export class BodyEnergy {
   /** Extra perception load (vision mode), W. */
   perceptionBoost = 0;
   ambient = 25;
-  /** Exponential average of battery power (for runtime), W. */
+  /** Battery power averaged over the last 3 s (for runtime: a few strides when walking), W. */
   avgPower = 200;
+  private binE = new Float64Array(30);
+  private binT = new Float64Array(30);
+  private bin = 0;
 
   constructor(model: RobotModel) {
     this.model = model;
@@ -189,8 +192,18 @@ export class BodyEnergy {
     // perception computer: heat sink and fan to the torso air path
     const pc = LV_LOADS[0].watts + this.perceptionBoost;
     this.computeT += (hdt * (pc - (this.computeT - this.ambient) / 0.9)) / 420;
-    const a = Math.min(1, dt / 20);
-    this.avgPower += (battery - this.avgPower) * a;
+    // 30 bins of 0.1 s
+    this.binE[this.bin] += battery * dt;
+    this.binT[this.bin] += dt;
+    if (this.binT[this.bin] >= 0.1) {
+      this.bin = (this.bin + 1) % this.binE.length;
+      this.binE[this.bin] = 0;
+      this.binT[this.bin] = 0;
+    }
+    let e = 0;
+    let t = 0;
+    for (let k = 0; k < this.binE.length; k++) (e += this.binE[k]), (t += this.binT[k]);
+    this.avgPower = t > 0 ? e / t : battery;
     this.summary = {
       jointsElec: elec,
       jointsMech: mech,

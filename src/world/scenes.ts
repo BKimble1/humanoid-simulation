@@ -134,7 +134,7 @@ export const SCENES: Record<string, SceneDef> = {
     pose: 'reach',
   },
   'sim.balance': {
-    shot: () => ({ id: 'balance', target: V(0, 0.75, 0.05), az: 0.9, el: 0.14, dist: 3.4, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'balance', target: V(0, 0.86, 0.05), az: 0.9, el: 0.14, dist: 4.0, fov: 30, phone: { dist: 1.95, oy: -0.035 }, orbit: ORBIT }),
     channels: { balanceViz: 1, forces: 1 },
     pose: 'balance',
   },

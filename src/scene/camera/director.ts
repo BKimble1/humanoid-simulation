@@ -38,6 +38,9 @@ export interface Shot {
   /** Lens shift (see CamState). */
   ox?: number;
   oy?: number;
+  /** On a phone held upright, when the default framing crops the subject: distance factor and
+   * extra vertical lens shift. */
+  phone?: { dist?: number; oy?: number };
   /** Transition time, s (default from how far the camera travels). */
   duration?: number;
   /** Slow orbit while holding, rad/s, and a gentle elevation sway amplitude, rad. */
@@ -110,14 +113,15 @@ export class Director {
   /** Vertical lens shift: on phones the panel is a bottom sheet, so the subject sits higher and
    * a little further away. */
   private lensY(s: Shot): number {
-    return this.compact ? (s.oy ?? 0) - (this.viewH > this.viewW ? 0.12 : 0.05) : (s.oy ?? 0);
+    if (!this.compact) return s.oy ?? 0;
+    return this.viewH > this.viewW ? (s.oy ?? 0) - 0.12 + (s.phone?.oy ?? 0) : (s.oy ?? 0) - 0.05;
   }
 
   private distOf(s: Shot): number {
     if (!this.compact) return s.dist;
     // portrait: the whole robot has to fit above the sheet
     const portrait = this.viewH > this.viewW;
-    return s.dist * (portrait ? (s.dist > 2.2 ? 1.72 : 1.35) : 1.12);
+    return s.dist * (portrait ? (s.phone?.dist ?? (s.dist > 2.2 ? 1.72 : 1.35)) : 1.12);
   }
   ceiling = 4.2;
   private dragging = false;

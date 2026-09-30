@@ -29,7 +29,8 @@ export function WalkLab({ world }: { world: World }) {
   const power = useMemo(() => [{ label: 'Battery', color: '#43c992', values: () => tr.p }], [tr]);
   const walking = !!r.wWalking || l.walking;
   const speed = GAITS[l.gait].speed;
-  const avgP = tr.p.length ? tr.p.reduce((a, b) => a + b, 0) / tr.p.length : 0;
+  // the same 3 s average the runtime is computed from
+  const avgP = Number(r.batteryAvgW ?? 0);
   const mass = Number(r.totalMass ?? 66) + (l.carry ? Number(r.wCarryMass ?? 0) : 0);
   const cot = r.wWalking ? avgP / (mass * GRAVITY * speed) : NaN;
   return (

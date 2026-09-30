@@ -58,10 +58,6 @@ export class WalkSource implements PoseSource {
   onTick: ((w: WalkSource) => void)[] = [];
   /** The last 4 s at 100 Hz: vertical ground reaction per foot (N), battery power (W), knee torques (Nm). */
   trace = { fl: [] as number[], fr: [] as number[], p: [] as number[], kl: [] as number[], kr: [] as number[] };
-  /** Steps taken since the walk started, and the time walked. */
-  steps = 0;
-  walkedTime = 0;
-  private lastSupport = '';
 
   constructor(
     private model: () => RobotModel,
@@ -93,10 +89,6 @@ export class WalkSource implements PoseSource {
   }
 
   start(gait: GaitSpec) {
-    if (!this.running) {
-      this.steps = 0;
-      this.walkedTime = 0;
-    }
     this.gait = gait;
     this.gen.walk(gait);
     this.running = true;
@@ -159,12 +151,6 @@ export class WalkSource implements PoseSource {
     tr.kl.push(this.last.tau[JOINT_INDEX.L_knee]);
     tr.kr.push(this.last.tau[JOINT_INDEX.R_knee]);
     if (tr.fl.length > 400) for (const k of Object.keys(tr) as (keyof typeof tr)[]) tr[k].shift();
-    if (f.walking) {
-      this.walkedTime += dt;
-      const sup = f.feet.L.contact === 'air' ? 'R' : f.feet.R.contact === 'air' ? 'L' : this.lastSupport;
-      if (sup !== this.lastSupport && sup) this.steps++;
-      this.lastSupport = sup;
-    }
     for (const cb of this.onTick) cb(this);
   }
 
@@ -173,7 +159,7 @@ export class WalkSource implements PoseSource {
     r.wWalking = f.walking;
     r.wSpeed = f.walking ? this.gait.speed : 0;
     r.wBelt = -this.beltSpeed;
-    r.wCadence = this.walkedTime > 1 ? (this.steps / this.walkedTime) * 60 : (60 / this.gait.stepTime);
+    r.wCadence = 60 / this.gait.stepTime;
     r.wStepLength = this.gait.stepLength;
     r.wCarry = this.carry;
     r.wCarryMass = this.carry ? this.carryMass : 0;

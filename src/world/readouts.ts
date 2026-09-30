@@ -53,6 +53,7 @@ export function publishReadouts(w: World) {
   r.regenW = s.regenerated;
   r.lvW = s.lv;
   r.standbyW = s.driveStandby;
+  r.batteryAvgW = e.avgPower;
   r.runtimeH = runtimeHours(w.model.pack, Math.max(60, e.avgPower));
   r.packC = e.pack.tempC;
   r.computeC = e.computeT;

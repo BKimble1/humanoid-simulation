@@ -361,7 +361,7 @@ export class PoseDriver {
         const k = decayWeight(u);
         f.ankle.addScaledVector(this.offFoot[s], k);
         if (this.footLift[s] > 0) {
-          f.ankle.y += this.footLift[s] * Math.sin(Math.PI * Math.min(1, u * 1.1));
+          f.ankle.y += this.footLift[s] * Math.sin(Math.PI * Math.min(1, u * 1.1)) ** 2;
           f.contact = 'swing';
         }
         f.quat.copy(b.quat).premultiply(_q.identity().slerp(this.offFootQ[s], k));

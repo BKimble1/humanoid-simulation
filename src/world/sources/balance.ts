@@ -41,11 +41,40 @@ class Spring {
     this.x += this.v * dt;
     return this.x;
   }
+  /** The same spring integrated exactly (stable however stiff, at any frame rate). */
+  follow(target: number, dt: number, w: number) {
+    const e = this.x - target;
+    const k = Math.exp(-w * dt);
+    const c = this.v + w * e;
+    this.x = target + (e + c * dt) * k;
+    this.v = (this.v - w * c * dt) * k;
+    return this.x;
+  }
 }
 
 const quintic = (u: number) => {
   const x = Math.min(1, Math.max(0, u));
   return x * x * x * (x * (x * 6 - 15) + 10);
+};
+
+/** The upper body at rest, as the task starts it: every arm joint, so that nothing another
+ * source left (a wrist turned while walking) jumps when the task takes over. */
+const RESTING_UPPER: Partial<Record<JointId, number>> = {
+  L_shoulder_pitch: 5,
+  R_shoulder_pitch: 5,
+  L_shoulder_roll: 7,
+  R_shoulder_roll: 7,
+  L_arm_yaw: -8,
+  R_arm_yaw: -8,
+  L_elbow: 16,
+  R_elbow: 16,
+  L_wrist_yaw: 0,
+  R_wrist_yaw: 0,
+  L_wrist_pitch: 0,
+  R_wrist_pitch: 0,
+  L_wrist_roll: 0,
+  R_wrist_roll: 0,
+  waist_yaw: 0,
 };
 
 type Phase = 'task' | 'push' | 'return' | 'fail' | 'restore';
@@ -77,6 +106,10 @@ export class BalanceSource implements PoseSource {
   private comZ = new Spring(0.035);
   private pitch = new Spring(1.5 * DEG);
   private arms = new Spring(0);
+  /** The drawn torso lean and arm swing of a push recovery: the model's, through fast springs
+   * (the model stops its torso dead at its rotation limit; drawn, that would be a pop). */
+  private torsoS = new Spring(0);
+  private swingS = new Spring(0);
   private footR = new Spring(0);
   private lift = 0;
   /** Lift timeline 0 (box on its platform) … 1 (carried), for the props. */
@@ -180,6 +213,8 @@ export class BalanceSource implements PoseSource {
     rec.push({ force: new Vector2(d[0] * forceN, d[1] * forceN), duration, height: 1.15 });
     this.rec = rec;
     this.phase = 'push';
+    this.torsoS = new Spring(0);
+    this.swingS = new Spring(0);
     this.arrowT = 0;
     this.minMargin = Infinity;
     this.outcome = null;
@@ -365,7 +400,7 @@ export class BalanceSource implements PoseSource {
     }
     const lift = (side: Side) => {
       const f = s.feet[side];
-      return f.down ? 0 : f.lift * Math.sin(Math.PI * f.t);
+      return f.down ? 0 : f.lift * Math.sin(Math.PI * f.t) ** 2;
     };
     this.feet = {
       L: { ...flatFoot(s.feet.L.pos.x, s.feet.L.pos.y) },
@@ -376,9 +411,10 @@ export class BalanceSource implements PoseSource {
     // hip strategy: the torso bends in the direction of the fall; arms swing with it
     const dirF = rec.hipDir.y;
     const dirS = rec.hipDir.x;
-    const pitch = 1.5 * DEG + s.torso * dirF;
-    const roll = -s.torso * dirS;
-    const swing = Math.max(-1, Math.min(1, s.torsoRate * 0.4));
+    const torso = this.torsoS.follow(s.torso, dt, 20);
+    const pitch = 1.5 * DEG + torso * dirF;
+    const roll = -torso * dirS;
+    const swing = this.swingS.follow(Math.max(-1, Math.min(1, s.torsoRate * 0.4)), dt, 16);
     const upper: Partial<Record<JointId, number>> = {
       L_shoulder_pitch: 5 + 30 * swing * dirF,
       R_shoulder_pitch: 5 + 30 * swing * dirF,
@@ -447,7 +483,9 @@ export class BalanceSource implements PoseSource {
     else if (r.stage === 1) {
       com = overOther;
       this.stance[r.side].copy(r.from).lerp(r.to, u);
-      lift = 0.045 * Math.sin(Math.PI * Math.min(1, r.t));
+      // (sin²: the foot leaves and lands with no vertical speed; sin would set it down at
+      // a quarter of a metre per second and stop it dead)
+      lift = 0.045 * Math.sin(Math.PI * Math.min(1, r.t)) ** 2;
     } else {
       const goal = this.ret.length > 1 ? mid : new Vector2(0, 0.035);
       com = overOther.clone().lerp(goal, u);
@@ -462,7 +500,10 @@ export class BalanceSource implements PoseSource {
     }
     this.feet = { L: flatFoot(this.stance.L.x, this.stance.L.y), R: flatFoot(this.stance.R.x, this.stance.R.y) };
     this.feet[r.side].ankle.y += lift;
-    solvePosture(model, this.kin, this.pose, { com, pelvisHeight: this.stand, pelvisPitch: 1.5 * DEG, feet: this.feet, upper: { L_shoulder_pitch: 5, R_shoulder_pitch: 5, L_shoulder_roll: 7, R_shoulder_roll: 7, L_elbow: 16, R_elbow: 16 }, iterations: 3 });
+    // (a foot left far out, by walking or a recovery step, would pull its leg straight as the
+    // weight moves off it: the pelvis lowers a little instead, softly, and rises as the feet
+    // come home)
+    solvePosture(model, this.kin, this.pose, { com, pelvisHeight: this.stand, pelvisPitch: 1.5 * DEG, feet: this.feet, upper: RESTING_UPPER, iterations: 3, limitReach: true });
     this.comX.x = com.x;
     this.comZ.x = com.y;
     this.comX.v = this.comZ.v = 0;
@@ -482,7 +523,7 @@ export class BalanceSource implements PoseSource {
     const target = new Pose();
     target.copy(this.pose);
     this.feet = this.footTargets(0);
-    solvePosture(model, this.kin, target, { com: new Vector2(0, 0.035), pelvisHeight: this.stand, pelvisPitch: 1.5 * DEG, feet: this.feet, upper: { L_shoulder_pitch: 5, R_shoulder_pitch: 5, L_shoulder_roll: 7, R_shoulder_roll: 7, L_elbow: 16, R_elbow: 16 }, iterations: 3 });
+    solvePosture(model, this.kin, target, { com: new Vector2(0, 0.035), pelvisHeight: this.stand, pelvisPitch: 1.5 * DEG, feet: this.feet, upper: RESTING_UPPER, iterations: 3 });
     this.pose.copy(r.from).lerp(target, u);
     if (r.t >= 1) {
       this.phase = 'task';

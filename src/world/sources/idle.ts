@@ -184,6 +184,8 @@ export class IdleSource implements PoseSource {
       feet: { L: this.feet.L, R: this.feet.R },
       upper,
       iterations: 3,
+      // while stepping from a wide stance a leg must not be pulled straight
+      limitReach: true,
     });
     if (this.carrying) {
       this.kin.update(this.pose);

@@ -36,8 +36,8 @@ export interface PostureInput {
   payloadPos?: Vector3;
   iterations?: number;
   /**
-   * Lower the pelvis where a leg would otherwise straighten (a softly limited reach, knee
-   * kept above ~5°): what the pelvis does at the end of a long stance.
+   * Lower the pelvis where a leg would otherwise straighten (a softly limited reach, the knee
+   * kept above ~10°): what the pelvis does when the weight moves off a foot that is far out.
    */
   limitReach?: boolean;
 }
@@ -94,8 +94,10 @@ function limitLegReach(pose: Pose, feet: { L: FootTarget; R: FootTarget }, kin: 
   const A = DIM.thigh * kin.scale.thigh;
   const B = DIM.shin * kin.scale.shin;
   const legAt = (kneeDeg: number) => Math.sqrt(A * A + B * B + 2 * A * B * Math.cos(kneeDeg * DEG));
-  const rs = legAt(14);
-  const rm = legAt(5);
+  // the limit starts at a 20° knee and settles toward 10°: near straight the knee angle is so
+  // sensitive to leg length that it would snap
+  const rs = legAt(20);
+  const rm = legAt(10);
   let drop = 0;
   for (const side of ['L', 'R'] as const) {
     _hip.set(side === 'L' ? DIM.hipHalfWidth : -DIM.hipHalfWidth, 0, 0).applyQuaternion(pose.pelvisQuat).add(pose.pelvisPos);

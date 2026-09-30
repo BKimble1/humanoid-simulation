@@ -131,7 +131,8 @@ export class StanceKeeper {
       f.yaw = st.from.yaw + (st.to.yaw - st.from.yaw) * u;
       // clearance: a lifted arc, or straight down from where it was
       const travel = Math.hypot(st.to.x - st.from.x, st.to.z - st.from.z);
-      const arc = travel > 0.004 ? Math.min(0.05, 0.022 + travel * 0.25) * Math.sin(Math.PI * Math.min(1, st.t)) : 0;
+      // (sin²: the foot leaves and lands with no vertical speed)
+      const arc = travel > 0.004 ? Math.min(0.05, 0.022 + travel * 0.25) * Math.sin(Math.PI * Math.min(1, st.t)) ** 2 : 0;
       this.lift[st.side] = st.fromAir ? st.fromAir * (1 - u) + arc * u : arc;
     } else {
       // weight back: to the middle, or — when the other foot steps next — straight over the

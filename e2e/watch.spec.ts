@@ -193,3 +193,49 @@ test('navigating after the 30 kg chapter: every chapter starts from its baseline
   expect(back.lab).toBe(mine.lab);
   expect(errors).toEqual([]);
 });
+
+test('the whole tour, every chapter and every change between them, plays continuously', async ({ page }) => {
+  test.setTimeout(1_200_000);
+  const errors = watchErrors(page);
+  await open(page, 'mode=explore&system=overview');
+  await settle(page);
+  type S = { i: number; scene: string; source: string; jv: number; ja: number; jvJoint: string; hv: number; pv: number; ca: number; cc: number; slipL: number; slipR: number };
+  type WT = { __fabSteps: (s: number[]) => void; __fabTelemetry: { max: number; start(): void; samples: S[]; events: { kind: string; detail?: string }[] } };
+  await page.evaluate(() => {
+    const w = window as unknown as WT & W;
+    w.__fabTelemetry.max = 20000;
+    w.__fabTelemetry.start();
+    (window as unknown as { __fabStores: { useApp: { getState: () => { go: (p: object) => void } } } }).__fabStores.useApp.getState().go({ mode: 'watch' });
+  });
+  // 200 s of tour, stepped without drawing
+  for (let k = 0; k < 230; k++) {
+    const playing = await page.evaluate(() => {
+      const w = window as unknown as WT & W;
+      w.__fabSteps(new Array(30).fill(1 / 30));
+      return w.__fab.tour.playing;
+    });
+    if (!playing) break;
+  }
+  const t = await page.evaluate(() => {
+    const w = window as unknown as WT;
+    return { samples: w.__fabTelemetry.samples, events: w.__fabTelemetry.events };
+  });
+  expect(t.samples.length, 'the tour played to its end').toBeGreaterThan(5900);
+  const worst = (s: S[], k: keyof S) => s.reduce((m, x) => ((x[k] as number) > (m[k] as number) ? x : m), s[0]);
+  const within = (s: S[], k: keyof S, max: number, what: string) => {
+    const w = worst(s, k);
+    expect(w[k] as number, `${what}: ${String(k)} at frame ${w.i} (${w.scene}, ${w.source}${k === 'jv' ? ', ' + w.jvJoint : ''})`).toBeLessThanOrEqual(max);
+  };
+  const notWalking = t.samples.filter((s) => s.source !== 'walk');
+  // a 300 N push is caught with a step: the recovering body moves faster than a blend does
+  within(notWalking, 'jv', 6, 'joints');
+  within(notWalking, 'ja', 90, 'joints');
+  within(t.samples, 'hv', 3.5, 'hands');
+  within(notWalking, 'pv', 0.6, 'pelvis');
+  within(t.samples, 'ca', 15, 'camera');
+  expect(Math.min(...t.samples.map((s) => s.cc)), 'camera clear of the robot').toBeGreaterThan(0.05);
+  expect(Math.max(...t.samples.map((s) => Math.max(s.slipL, s.slipR))), 'planted soles').toBeLessThanOrEqual(0.02);
+  expect(t.events.filter((e) => e.kind === 'forced-handover' || e.kind === 'camera-clamp')).toEqual([]);
+  expect(t.events.filter((e) => e.kind === 'tour-action').map((e) => e.detail)).toEqual(['grip#0', 'grip#1', 'balance#0']);
+  expect(errors).toEqual([]);
+});

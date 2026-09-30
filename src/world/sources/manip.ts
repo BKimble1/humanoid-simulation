@@ -363,7 +363,7 @@ export class ManipSource implements PoseSource {
     const nominal = new Vector2(0, 0.045);
     this.stance.update(dt, nominal);
     this.stance.footPoses(this.feet);
-    solvePosture(model, this.kin, this.pose, { com: this.stance.com ?? nominal, pelvisHeight: this.stand - 0.012 * reachFrac, pelvisPitch: (1.5 + this.lean) * DEG, feet: this.feet, upper: { ...REST_ARM }, iterations: 3, payloadPos: heldPos });
+    solvePosture(model, this.kin, this.pose, { com: this.stance.com ?? nominal, pelvisHeight: this.stand - 0.012 * reachFrac, pelvisPitch: (1.5 + this.lean) * DEG, feet: this.feet, upper: { ...REST_ARM }, iterations: 3, payloadPos: heldPos, limitReach: true });
     // where the hands rest, and how they are turned (for the retract move)
     this.kin.update(this.pose);
     for (const side of ['L', 'R'] as Side[]) {

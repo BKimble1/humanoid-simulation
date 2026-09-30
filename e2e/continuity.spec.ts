@@ -223,6 +223,8 @@ test('walking: start, gait change, stop, carrying, and walk → balance → one 
   expect(Math.max(...t.samples.map((s) => Math.max(s.slipL, s.slipR))), 'planted soles do not slide').toBeLessThanOrEqual(0.02);
   expect(Math.min(...t.samples.map((s) => s.soleMin)), 'no sole through the floor').toBeGreaterThan(-0.003);
   expectWithin(t.samples, 'jv', 12, 'joints');
+  // outside walking's own strides (a knee in swing), no joint snaps: stepping feet land softly
+  expectWithin(t.samples.filter((s) => s.source !== 'walk'), 'ja', 90, 'joints when not walking');
   expectWithin(t.samples.filter((s) => s.source !== 'walk'), 'pv', 0.5, 'pelvis when not walking');
   noFailures(t);
   const src = await page.evaluate(() => (window as unknown as { __fab: { driver: { source: { id: string } } } }).__fab.driver.source.id);

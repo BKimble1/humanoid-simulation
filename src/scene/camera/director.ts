@@ -169,6 +169,15 @@ export class Director {
   /** The part of the view the interface leaves free (fractions: left, top, right, bottom),
    * measured from the page's header and panels. Shots keep their subject inside it. */
   free = { l: 0, t: 0, r: 1, b: 1 };
+  /** `free` as the framing uses it: followed by a critically damped spring, so a change of
+   * layout (a caption of another length, a sheet collapsing) reframes smoothly, even mid-move. */
+  private freeNow = { l: 0, t: 0, r: 1, b: 1 };
+  private freeV = { l: 0, t: 0, r: 0, b: 0 };
+  /** The framing's own drift (distance and lens shift moving with the layout), per second, and
+   * the hold's springs, which start from it when a move ends: no stop-start at the handover. */
+  private endPrev: { dist: number; ox: number; oy: number } | null = null;
+  private endVel = { dist: 0, ox: 0, oy: 0 };
+  private holdV = { dist: 0, ox: 0, oy: 0 };
   /** The followed target, filtered (a shot's anchor, without the robot's millimetre sway). */
   private follow = new Vector3();
   private followV = new Vector3();
@@ -194,7 +203,7 @@ export class Director {
    */
   private fitDist(s: Shot): number {
     const sub = this.subjectOf(s);
-    const f = this.free;
+    const f = this.freeNow;
     const tan = Math.tan(((s.fov ?? 30) * Math.PI) / 360);
     const fh = Math.max(0.2, f.b - f.t) * 0.9;
     const fw = Math.max(0.2, f.r - f.l) * 0.92;
@@ -220,7 +229,7 @@ export class Director {
    * appears at 0.5 − ox across the view.
    */
   private lensX(s: Shot): number {
-    const f = this.free;
+    const f = this.freeNow;
     const half = this.halfSize(s).x;
     const want = 0.5 - (this.compact ? 0 : (s.ox ?? 0));
     const lo = f.l + 0.02 + half;
@@ -232,7 +241,7 @@ export class Director {
   /** Vertical lens shift, likewise: the subject appears at 0.5 + oy down the view. On phones it
    * is centred in the room above the sheet. */
   private lensY(s: Shot): number {
-    const f = this.free;
+    const f = this.freeNow;
     const half = this.halfSize(s).y;
     const want = this.compact ? (f.t + f.b) / 2 + (this.viewH > this.viewW ? (s.phone?.oy ?? 0) : 0) : 0.5 + (s.oy ?? 0);
     const lo = f.t + 0.02 + half;
@@ -378,6 +387,7 @@ export class Director {
 
   private snapToShot() {
     const s = this.shot!;
+    this.holdV = { dist: 0, ox: 0, oy: 0 };
     this.cur = { target: this.targetOf(s).clone(), az: s.az, el: s.el, dist: this.distOf(s), fov: s.fov ?? 30, ox: this.lensX(s), oy: this.lensY(s) };
     this.follow.copy(this.cur.target);
   }
@@ -402,6 +412,19 @@ export class Director {
   update(dt: number, inputDt = dt) {
     const s = this.shot;
     if (!s) return;
+    // the layout's free area, followed smoothly, on the presentation clock: a paused picture
+    // holds still (a layout change made during a pause is taken up on play)
+    const ft = dt;
+    if (ft > 0) {
+      const w = 4;
+      const k = Math.exp(-w * ft);
+      for (const key of ['l', 't', 'r', 'b'] as const) {
+        const e = this.freeNow[key] - this.free[key];
+        const c = this.freeV[key] + w * e;
+        this.freeNow[key] = this.free[key] + (e + c * ft) * k;
+        this.freeV[key] = (this.freeV[key] - w * c * ft) * k;
+      }
+    }
     // the followed anchor, filtered: tracks the task, not the sway
     if (dt > 0) {
       const anchor = this.targetOf(s);
@@ -414,6 +437,20 @@ export class Director {
         this.followV.addScaledVector(e, w * w * dt).addScaledVector(this.followV, -2 * w * dt);
         this.follow.addScaledVector(this.followV, dt);
       } else this.follow.copy(anchor);
+    }
+    // how fast the framing itself is moving (a layout change mid-move)
+    if (dt > 0) {
+      const d = this.distOf(s);
+      const x = this.lensX(s);
+      const y = this.lensY(s);
+      if (this.endPrev) {
+        this.endVel.dist = (d - this.endPrev.dist) / dt;
+        this.endVel.ox = (x - this.endPrev.ox) / dt;
+        this.endVel.oy = (y - this.endPrev.oy) / dt;
+        this.endPrev.dist = d;
+        this.endPrev.ox = x;
+        this.endPrev.oy = y;
+      } else this.endPrev = { dist: d, ox: x, oy: y };
     }
     let planned = false;
     if (this.moving && this.from) {
@@ -438,8 +475,10 @@ export class Director {
       if (u >= 1) {
         this.moving = false;
         this.cur.az = wrap(this.cur.az);
-        // the swing-out ends at zero: the hold starts exactly where the move ended
+        // the swing-out ends at zero: the hold starts exactly where the move ended, moving as
+        // the framing moves
         this.plan = { k: 0, ke: 0 };
+        this.holdV = { ...this.endVel };
       }
     } else if (dt > 0) {
       // holding: follow the target, drift slowly
@@ -450,10 +489,16 @@ export class Director {
       const sway = s.sway ? s.sway * Math.sin(this.driftPhase * 0.21) * Math.min(1, this.driftPhase / 4) : 0;
       const k3 = 1 - Math.exp(-dt * 3);
       this.cur.el += (s.el + sway - this.cur.el) * k3;
-      this.cur.dist += (this.distOf(s) - this.cur.dist) * k3;
       this.cur.fov += ((s.fov ?? 30) - this.cur.fov) * k3;
-      this.cur.ox += (this.lensX(s) - this.cur.ox) * k3;
-      this.cur.oy += (this.lensY(s) - this.cur.oy) * k3;
+      // distance and lens shift follow the framing with critically damped springs (they keep
+      // the speed a move ended with, when the layout was changing under it)
+      const w = 3;
+      const hv = this.holdV;
+      const e = { dist: this.distOf(s) - this.cur.dist, ox: this.lensX(s) - this.cur.ox, oy: this.lensY(s) - this.cur.oy };
+      for (const k of ['dist', 'ox', 'oy'] as const) {
+        hv[k] += (w * w * e[k] - 2 * w * hv[k]) * dt;
+        this.cur[k] += hv[k] * dt;
+      }
     }
     // visitor orbit inertia (input clock)
     if (!this.dragging && inputDt > 0) {
@@ -659,6 +704,10 @@ export class Director {
   /** The layout's free area is known (first measured, or changed while nothing is on screen):
    * a holding shot takes its framing at once instead of easing into it. */
   snapFraming() {
+    Object.assign(this.freeNow, this.free);
+    this.freeV = { l: 0, t: 0, r: 0, b: 0 };
+    this.holdV = { dist: 0, ox: 0, oy: 0 };
+    this.endPrev = null;
     if (this.shot && !this.moving) {
       this.cur.dist = this.distOf(this.shot);
       this.cur.ox = this.lensX(this.shot);

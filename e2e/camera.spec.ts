@@ -165,21 +165,22 @@ test('the framing follows the layout: orientation changes and the phone sheet ke
   inside(await fit(), 'portrait');
   const tall = await fit();
   // the sheet collapsed: more room, the robot is framed larger
+  // (the framing follows the layout with springs: about two and a half seconds to settle)
   await page.getByRole('button', { name: 'Collapse the panel' }).click();
-  await advance(page, 60);
+  await advance(page, 90);
   const collapsed = await fit();
   inside(collapsed, 'sheet collapsed');
   expect(collapsed.bottom - collapsed.top, 'larger with the sheet collapsed').toBeGreaterThan((tall.bottom - tall.top) * 1.1);
   await page.getByRole('button', { name: 'Expand the panel' }).click();
-  await advance(page, 60);
+  await advance(page, 90);
   inside(await fit(), 'sheet expanded again');
   // turned to landscape and back
   await page.setViewportSize({ width: 844, height: 390 });
-  await advance(page, 60);
+  await advance(page, 90);
   const land = await fit();
   expect(Number.isFinite(land.top) && Number.isFinite(land.bottom)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
-  await advance(page, 60);
+  await advance(page, 90);
   inside(await fit(), 'portrait again');
   const cam = await page.evaluate(() => (window as unknown as W).__fab.stage.camera.position);
   expect([cam.x, cam.y, cam.z].every(Number.isFinite)).toBe(true);

@@ -107,7 +107,7 @@ export class ReachSource implements PoseSource {
     this.stance.footPoses(this.feet);
     // the arm's command: IK from the servoed arm, or the FK sliders
     const cmd = this.solveQ;
-    solvePosture(this.model(), this.kin, this.pose, { com: this.stance.com ?? nominal, pelvisHeight: this.stand, pelvisPitch: 1.5 * DEG, feet: this.feet, upper: rest, iterations: 2 });
+    solvePosture(this.model(), this.kin, this.pose, { com: this.stance.com ?? nominal, pelvisHeight: this.stand, pelvisPitch: 1.5 * DEG, feet: this.feet, upper: rest, iterations: 2, limitReach: true });
     if (this.mode === 'ik') {
       this.scratch.copy(this.pose);
       ids.forEach((id, i) => this.scratch.set(id, this.armQ[this.side][i]));

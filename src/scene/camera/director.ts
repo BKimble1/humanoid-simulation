@@ -1,17 +1,29 @@
 /**
  * The camera director: the only code that moves the camera.
  *
- * A camera state is an orbit about a target: azimuth, elevation, distance, field of view. A
- * shot names a destination state (its target may follow an anchor on the robot), how long to
- * get there, how the camera may drift while it holds, and how far the visitor may orbit.
+ * A camera state is an orbit about a target: azimuth, elevation, distance, field of view, and
+ * a lens shift. A shot names a destination state (its target may follow an anchor on the
+ * robot), how long to get there, how the camera may drift while it holds, and how far the
+ * visitor may orbit.
  *
  * Transitions are velocity-continuous: each parameter follows a quintic from the camera's
- * state *and velocity* at the moment the transition starts to the destination at rest, with
- * zero acceleration at the end. A new shot requested mid-move therefore starts from where the
- * camera actually is and how it is moving: no snap, no stop-and-go, whatever the visitor clicks.
- * Azimuth takes the shorter way round. The path is an orbit about a moving target, so it
- * stays at a distance from the robot; a keep-out check pushes the camera out of the robot's
- * volumes and above the floor if a shot or the visitor ever asks for it.
+ * state *and velocity* at the moment the transition starts to the destination at rest. A new
+ * shot requested mid-move therefore starts from the picture shown and how it is moving. The
+ * carried velocity is bounded, so a fast fling or a sharp reversal never turns into a wide
+ * overshoot. Asking again for the shot already being approached does not restart it.
+ *
+ * The path is planned clear of the robot: before a move starts, the director samples it
+ * against the robot's collision proxies (and any props named as obstacles) with the near
+ * plane's clearance, and if it passes too close it swings the path out — a smooth dolly-out
+ * and rise that is zero at both ends — or, if the destination itself is too close, settles
+ * further out. While holding, a soft avoidance (part of the camera state, so the next move
+ * starts from it) keeps a moving robot from walking into the lens. A last-resort clamp exists
+ * and is reported to the developer telemetry if it ever acts.
+ *
+ * Two clocks: shot moves, drift and follow run on the presentation clock (they stop while
+ * the tour is paused); the visitor's orbit and its inertia run on the input clock. All
+ * damping uses elapsed time, and a fling's speed comes from the pointer events' timestamps,
+ * so behaviour does not depend on the frame or event rate.
  */
 import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
 
@@ -46,15 +58,18 @@ export interface Shot {
   /** Slow orbit while holding, rad/s, and a gentle elevation sway amplitude, rad. */
   drift?: number;
   sway?: number;
+  /** How closely a following shot tracks its anchor (rad/s; default 3.5). */
+  follow?: number;
   /** What the visitor may do while the shot holds. */
   orbit?: { az?: [number, number] | null; el?: [number, number]; dist?: [number, number] } | false;
 }
 
+/** Something the camera must stay out of: a capsule from a to b with radius r (world). */
 export interface KeepOut {
-  /** Capsule from a to b with radius r (world). */
   a: Vector3;
   b: Vector3;
   r: number;
+  id?: string;
 }
 
 const TAU = Math.PI * 2;
@@ -67,10 +82,22 @@ function quintic(p0: number, v0: number, p1: number, u: number): number {
   return p0 + v0 * u + a3 * u * u * u + a4 * u * u * u * u + a5 * u * u * u * u * u;
 }
 
+/** A bump that is 0 with zero slope and curvature at both ends and 1 in the middle. */
+function bump(u: number): number {
+  const x = u * (1 - u);
+  return 64 * x * x * x;
+}
+
 function wrap(a: number): number {
   a = (a + Math.PI) % TAU;
   if (a < 0) a += TAU;
   return a - Math.PI;
+}
+
+/** Keep a carried velocity from overshooting: |v0·T| no more than k·|d| + floor. */
+function boundV(v0: number, d: number, T: number, floor: number, k = 2.2): number {
+  const lim = (k * Math.abs(d) + floor) / Math.max(1e-3, T);
+  return MathUtils.clamp(v0, -lim, lim);
 }
 
 export function positionOf(s: CamState, out = new Vector3()): Vector3 {
@@ -78,9 +105,25 @@ export function positionOf(s: CamState, out = new Vector3()): Vector3 {
   return out.set(s.target.x + s.dist * c * Math.sin(s.az), s.target.y + s.dist * Math.sin(s.el), s.target.z + s.dist * c * Math.cos(s.az));
 }
 
+const _ab = new Vector3();
+const _ap = new Vector3();
+function capsuleClearance(k: KeepOut, p: Vector3): number {
+  _ab.subVectors(k.b, k.a);
+  _ap.subVectors(p, k.a);
+  const L2 = _ab.lengthSq();
+  const t = L2 > 1e-12 ? MathUtils.clamp(_ap.dot(_ab) / L2, 0, 1) : 0;
+  return Math.hypot(p.x - (k.a.x + _ab.x * t), p.y - (k.a.y + _ab.y * t), p.z - (k.a.z + _ab.z * t)) - k.r;
+}
+
+interface Plan {
+  /** Dolly-out and rise applied along the path (0 at both ends). */
+  k: number;
+  ke: number;
+}
+
 export class Director {
   camera: PerspectiveCamera;
-  /** The state the camera shows now. */
+  /** The state the camera shows now (before the visitor's offsets and the avoidance). */
   cur: CamState = { target: new Vector3(0, 1, 0), az: 0.4, el: 0.12, dist: 4, fov: 30, ox: 0, oy: 0 };
   /** Rate of change of each parameter (per second), for velocity-continuous transitions. */
   private vel = { t: new Vector3(), az: 0, el: 0, dist: 0, fov: 0, ox: 0, oy: 0 };
@@ -90,160 +133,319 @@ export class Director {
   private fromVel = { t: new Vector3(), az: 0, el: 0, dist: 0, fov: 0, ox: 0, oy: 0 };
   private dur = 1;
   private t = 0;
+  private plan: Plan = { k: 0, ke: 0 };
+  /** Destination distance factor when the shot's own distance is too close to the robot. */
+  private endScale = 1;
   /** The visitor's orbit offsets on top of the shot. */
   user = { az: 0, el: 0, zoom: 1 };
   private userVel = { az: 0, el: 0 };
   private driftPhase = 0;
+  /** Static obstacles (props); the robot's come from `obstacles`. */
   keepOut: KeepOut[] = [];
+  /** Moving obstacles, read every frame (the robot's collision proxies). */
+  obstacles: () => readonly KeepOut[] = () => [];
+  /** Soft avoidance while holding: extra distance factor and its rate. */
+  private avoid = 0;
+  private avoidV = 0;
   /** A transition is running. */
   moving = false;
   /** Counts transitions started (telemetry: which move a frame belongs to). */
   transitionId = 0;
+  /** Called if the last-resort clamp had to push the camera out (telemetry). */
+  onClamp?: (by: number) => void;
   /** Time scale for reduced motion (transitions become short cross-moves). */
   reducedMotion = false;
   floor = 0.12;
+  ceiling = 4.2;
   /** Viewport size (for the lens shift) and a compact layout flag (phones: no side shift). */
   viewW = 1280;
   viewH = 800;
   compact = false;
-
-  /** The shot's horizontal lens shift for the current layout. */
-  private lensX(s: Shot): number {
-    return this.compact ? 0 : (s.ox ?? 0);
-  }
-
-  /** Vertical lens shift: on phones the panel is a bottom sheet, so the subject sits higher and
-   * a little further away. */
-  private lensY(s: Shot): number {
-    if (!this.compact) return s.oy ?? 0;
-    return this.viewH > this.viewW ? (s.oy ?? 0) - 0.12 + (s.phone?.oy ?? 0) : (s.oy ?? 0) - 0.05;
-  }
-
-  private distOf(s: Shot): number {
-    if (!this.compact) return s.dist;
-    // portrait: the whole robot has to fit above the sheet
-    const portrait = this.viewH > this.viewW;
-    return s.dist * (portrait ? (s.phone?.dist ?? (s.dist > 2.2 ? 1.72 : 1.35)) : 1.12);
-  }
-  ceiling = 4.2;
+  /** The followed target, filtered (a shot's anchor, without the robot's millimetre sway). */
+  private follow = new Vector3();
+  private followV = new Vector3();
   private dragging = false;
 
   constructor(camera: PerspectiveCamera) {
     this.camera = camera;
   }
 
+  /** The shot's horizontal lens shift for the current layout. */
+  private lensX(s: Shot): number {
+    return this.compact ? 0 : (s.ox ?? 0);
+  }
+
+  /** Vertical lens shift: on phones the panel is a bottom sheet, so the subject sits higher. */
+  private lensY(s: Shot): number {
+    if (!this.compact) return s.oy ?? 0;
+    return this.viewH > this.viewW ? (s.oy ?? 0) - 0.12 + (s.phone?.oy ?? 0) : (s.oy ?? 0) - 0.05;
+  }
+
+  private distOf(s: Shot): number {
+    let d = s.dist;
+    if (this.compact) {
+      // portrait: the whole subject has to fit above the sheet
+      const portrait = this.viewH > this.viewW;
+      d *= portrait ? (s.phone?.dist ?? (s.dist > 2.2 ? 1.72 : 1.35)) : 1.12;
+    }
+    return d * this.endScale;
+  }
+
   private targetOf(s: Shot): Vector3 {
     return typeof s.target === 'function' ? s.target() : s.target;
   }
 
+  /** Clearance of a camera position from every obstacle, less the margin it needs (m). */
+  clearanceAt(p: Vector3, dist: number): number {
+    const margin = 0.05 + dist * 0.03;
+    let c = Infinity;
+    for (const k of this.obstacles()) c = Math.min(c, capsuleClearance(k, p));
+    for (const k of this.keepOut) c = Math.min(c, capsuleClearance(k, p));
+    return c - margin;
+  }
+
   /** Start a shot from wherever the camera is, carrying its current motion. */
-  go(shot: Shot, opts: { duration?: number; keepUser?: boolean; instant?: boolean } = {}) {
-    const dest = this.targetOf(shot);
+  go(shot: Shot, opts: { duration?: number; keepUser?: boolean; instant?: boolean; replan?: boolean } = {}) {
+    // the same shot again while it is being approached or held: carry on
+    if (!opts.instant && !opts.replan && this.shot && this.shot.id === shot.id && !opts.keepUser && opts.duration === undefined) {
+      this.shot = shot;
+      return;
+    }
     this.transitionId++;
-    // include the visitor's offsets in the starting state, then clear them
+    // include the visitor's offsets and the avoidance in the starting state, then clear them
     const start = this.effective();
     this.from = { target: start.target.clone(), az: start.az, el: start.el, dist: start.dist, fov: start.fov, ox: start.ox, oy: start.oy };
-    this.fromVel = { t: this.vel.t.clone(), az: this.vel.az, el: this.vel.el, dist: this.vel.dist, fov: this.vel.fov, ox: this.vel.ox, oy: this.vel.oy };
+    const v = this.vel;
+    this.fromVel = { t: v.t.clone(), az: v.az, el: v.el, dist: v.dist, fov: v.fov, ox: v.ox, oy: v.oy };
     if (!opts.keepUser) {
       this.user = { az: 0, el: 0, zoom: 1 };
       this.userVel = { az: 0, el: 0 };
     }
+    this.avoid = 0;
+    this.avoidV = 0;
     this.cur = { ...this.from, target: this.from.target.clone() };
     this.shot = shot;
+    this.endScale = 1;
     this.driftPhase = 0;
     this.t = 0;
+    const dest = this.targetOf(shot);
+    this.follow.copy(dest);
+    this.followV.set(0, 0, 0);
     // duration from the size of the move (angular, distance ratio, target travel)
     const dAz = Math.abs(wrap(shot.az - this.from.az));
     const dEl = Math.abs(shot.el - this.from.el);
-    const dD = Math.abs(Math.log(shot.dist / Math.max(0.05, this.from.dist)));
+    const dD = Math.abs(Math.log(this.distOf(shot) / Math.max(0.05, this.from.dist)));
     const dT = dest.distanceTo(this.from.target);
-    const auto = 1.1 + 0.55 * dAz + 0.9 * dEl + 0.7 * dD + 0.45 * dT;
-    this.dur = opts.instant ? 0 : (opts.duration ?? shot.duration ?? Math.min(3.2, Math.max(1.2, auto)));
-    if (this.reducedMotion && !opts.instant) this.dur = Math.min(this.dur, 0.6);
+    const auto = 0.9 + 0.5 * dAz + 0.9 * dEl + 0.65 * dD + 0.45 * dT;
+    this.dur = opts.instant ? 0 : (opts.duration ?? shot.duration ?? Math.min(3.0, Math.max(0.9, auto)));
+    if (this.reducedMotion && !opts.instant) this.dur = Math.min(this.dur, 0.5);
+    // bound the carried velocity so it cannot throw the path wide
+    const T = Math.max(0.05, this.dur);
+    const fv = this.fromVel;
+    fv.az = boundV(MathUtils.clamp(fv.az, -1.6, 1.6), wrap(shot.az - this.from.az), T, 0.2);
+    fv.el = boundV(MathUtils.clamp(fv.el, -1, 1), shot.el - this.from.el, T, 0.08);
+    const d0 = Math.max(0.05, this.from.dist);
+    fv.dist = boundV(MathUtils.clamp(fv.dist / d0, -1.5, 1.5), Math.log(this.distOf(shot) / d0), T, 0.12) * d0;
+    fv.fov = boundV(MathUtils.clamp(fv.fov, -20, 20), (shot.fov ?? 30) - this.from.fov, T, 0.5);
+    fv.ox = boundV(fv.ox, this.lensX(shot) - this.from.ox, T, 0.01);
+    fv.oy = boundV(fv.oy, this.lensY(shot) - this.from.oy, T, 0.01);
+    for (const ax of ['x', 'y', 'z'] as const) fv.t[ax] = boundV(MathUtils.clamp(fv.t[ax], -2, 2), dest[ax] - this.from.target[ax], T, 0.3);
     this.moving = this.dur > 0;
+    this.planPath();
     if (!this.moving) this.snapToShot();
+  }
+
+  /** The state along the planned move at u (0 … 1), without avoidance. */
+  private sample(u: number, out: CamState): CamState {
+    const s = this.shot!;
+    const f = this.from!;
+    const v = this.fromVel;
+    const T = this.dur;
+    const dest = this.follow;
+    const azDest = f.az + wrap(s.az - f.az);
+    out.az = quintic(f.az, v.az * T, azDest, u);
+    out.el = quintic(f.el, v.el * T, s.el, u) + this.plan.ke * bump(u);
+    out.dist = Math.exp(quintic(Math.log(f.dist), (v.dist / Math.max(0.05, f.dist)) * T, Math.log(this.distOf(s)), u)) * (1 + this.plan.k * bump(u));
+    out.fov = quintic(f.fov, v.fov * T, s.fov ?? 30, u);
+    out.ox = quintic(f.ox, v.ox * T, this.lensX(s), u);
+    out.oy = quintic(f.oy, v.oy * T, this.lensY(s), u);
+    out.target.set(quintic(f.target.x, v.t.x * T, dest.x, u), quintic(f.target.y, v.t.y * T, dest.y, u), quintic(f.target.z, v.t.z * T, dest.z, u));
+    return out;
+  }
+
+  /** Choose the smallest swing-out that keeps the whole move clear of the robot. */
+  private planPath() {
+    this.plan = { k: 0, ke: 0 };
+    if (!this.shot || !this.from || (!this.obstacles().length && !this.keepOut.length)) return;
+    const st: CamState = { target: new Vector3(), az: 0, el: 0, dist: 0, fov: 30, ox: 0, oy: 0 };
+    const p = new Vector3();
+    if (!this.moving) {
+      // an instant shot that would sit inside the robot settles further out
+      for (let i = 0; i < 12; i++) {
+        const s = this.shot;
+        const probe: CamState = { target: this.targetOf(s).clone(), az: s.az, el: s.el, dist: this.distOf(s), fov: s.fov ?? 30, ox: 0, oy: 0 };
+        if (this.clearanceAt(positionOf(probe, p), probe.dist) >= 0) break;
+        this.endScale *= 1.08;
+      }
+      return;
+    }
+    // the destination first: a shot that would sit inside the robot settles further out
+    for (let i = 0; i < 12; i++) {
+      this.sample(1, st);
+      if (this.clearanceAt(positionOf(st, p), st.dist) >= 0) break;
+      this.endScale *= 1.08;
+    }
+    const worst = () => {
+      let m = Infinity;
+      for (let i = 1; i < 32; i++) {
+        this.sample(i / 32, st);
+        m = Math.min(m, this.clearanceAt(positionOf(st, p), st.dist));
+      }
+      return m;
+    };
+    if (worst() >= 0) return;
+    let best: Plan | null = null;
+    let bestCost = Infinity;
+    for (const k of [0.1, 0.2, 0.35, 0.5, 0.75, 1.0, 1.4]) {
+      for (const ke of [0, 0.12, 0.25, 0.4]) {
+        const cost = k + ke * 1.6;
+        if (cost >= bestCost) continue;
+        this.plan = { k, ke };
+        if (worst() >= 0) {
+          best = { k, ke };
+          bestCost = cost;
+        }
+      }
+    }
+    this.plan = best ?? { k: 1.4, ke: 0.4 };
+    if (best) this.dur = Math.min(3.4, this.dur * (1 + 0.25 * best.k));
   }
 
   private snapToShot() {
     const s = this.shot!;
     this.cur = { target: this.targetOf(s).clone(), az: s.az, el: s.el, dist: this.distOf(s), fov: s.fov ?? 30, ox: this.lensX(s), oy: this.lensY(s) };
+    this.follow.copy(this.cur.target);
   }
 
-  /** The state including the visitor's orbit offsets. */
+  /** The state shown: with the visitor's orbit offsets and the avoidance. */
   effective(): CamState {
-    return { target: this.cur.target.clone(), az: this.cur.az + this.user.az, el: this.cur.el + this.user.el, dist: this.cur.dist * this.user.zoom, fov: this.cur.fov, ox: this.cur.ox, oy: this.cur.oy };
+    return {
+      target: this.cur.target.clone(),
+      az: this.cur.az + this.user.az,
+      el: this.cur.el + this.user.el,
+      dist: this.cur.dist * this.user.zoom * (1 + this.avoid),
+      fov: this.cur.fov,
+      ox: this.cur.ox,
+      oy: this.cur.oy,
+    };
   }
 
-  update(dt: number) {
+  /**
+   * Advance: `dt` on the presentation clock (0 while paused: the move and the follow stop),
+   * `inputDt` on the real clock (the visitor's orbit keeps working).
+   */
+  update(dt: number, inputDt = dt) {
     const s = this.shot;
     if (!s) return;
-    const prevEff = this.prev;
+    // the followed anchor, filtered: tracks the task, not the sway
+    if (dt > 0) {
+      const anchor = this.targetOf(s);
+      if (typeof s.target === 'function') {
+        const w = s.follow ?? 3.5;
+        const e = _e.subVectors(anchor, this.follow);
+        const m = e.length();
+        const db = 0.006;
+        if (m < 2 * db) e.multiplyScalar((m / (2 * db)) * (m / (2 * db)));
+        this.followV.addScaledVector(e, w * w * dt).addScaledVector(this.followV, -2 * w * dt);
+        this.follow.addScaledVector(this.followV, dt);
+      } else this.follow.copy(anchor);
+    }
+    let planned = false;
     if (this.moving && this.from) {
       this.t += dt;
       const u = Math.min(1, this.t / this.dur);
-      const T = this.dur;
-      const dest = this.targetOf(s);
-      const f = this.from;
-      const v = this.fromVel;
-      // shortest way round in azimuth
-      const azDest = f.az + wrap(s.az - f.az);
-      this.cur.az = quintic(f.az, v.az * T, azDest, u);
-      this.cur.el = quintic(f.el, v.el * T, s.el, u);
-      this.cur.dist = Math.exp(quintic(Math.log(f.dist), (v.dist / Math.max(0.05, f.dist)) * T, Math.log(this.distOf(s)), u));
-      this.cur.fov = quintic(f.fov, v.fov * T, s.fov ?? 30, u);
-      this.cur.ox = quintic(f.ox, v.ox * T, this.lensX(s), u);
-      this.cur.oy = quintic(f.oy, v.oy * T, this.lensY(s), u);
-      this.cur.target.set(quintic(f.target.x, v.t.x * T, dest.x, u), quintic(f.target.y, v.t.y * T, dest.y, u), quintic(f.target.z, v.t.z * T, dest.z, u));
+      this.sample(u, this.cur);
+      if (u < 1 && dt > 0) {
+        // the path's own rate of change (exact, no estimation lag) for the next move's start
+        const h = Math.min(0.01, 1 - u, u) || 0.005;
+        const a = this.sample(Math.max(0, u - h), _sa);
+        const b = this.sample(Math.min(1, u + h), _sb);
+        const k = 1 / ((Math.min(1, u + h) - Math.max(0, u - h)) * this.dur);
+        this.vel.az = wrap(b.az - a.az) * k;
+        this.vel.el = (b.el - a.el) * k;
+        this.vel.dist = (b.dist - a.dist) * k * this.user.zoom * (1 + this.avoid);
+        this.vel.fov = (b.fov - a.fov) * k;
+        this.vel.ox = (b.ox - a.ox) * k;
+        this.vel.oy = (b.oy - a.oy) * k;
+        this.vel.t.subVectors(b.target, a.target).multiplyScalar(k);
+        planned = true;
+      }
       if (u >= 1) {
         this.moving = false;
         this.cur.az = wrap(this.cur.az);
+        // the swing-out ends at zero: the hold starts exactly where the move ended
+        this.plan = { k: 0, ke: 0 };
       }
-    } else {
+    } else if (dt > 0) {
       // holding: follow the target, drift slowly
-      const dest = this.targetOf(s);
-      this.cur.target.copy(dest);
+      this.cur.target.copy(this.follow);
       this.driftPhase += dt;
       if (s.drift) this.cur.az = wrap(this.cur.az + s.drift * dt);
-      else this.cur.az = s.az + (this.cur.az - s.az) * Math.exp(-dt * 2);
+      else this.cur.az = s.az + wrap(this.cur.az - s.az) * Math.exp(-dt * 2);
       const sway = s.sway ? s.sway * Math.sin(this.driftPhase * 0.21) * Math.min(1, this.driftPhase / 4) : 0;
-      this.cur.el = s.el + sway;
-      this.cur.dist += (this.distOf(s) - this.cur.dist) * Math.min(1, dt * 3);
-      this.cur.fov = s.fov ?? 30;
-      this.cur.ox += (this.lensX(s) - this.cur.ox) * Math.min(1, dt * 3);
-      this.cur.oy += (this.lensY(s) - this.cur.oy) * Math.min(1, dt * 3);
+      const k3 = 1 - Math.exp(-dt * 3);
+      this.cur.el += (s.el + sway - this.cur.el) * k3;
+      this.cur.dist += (this.distOf(s) - this.cur.dist) * k3;
+      this.cur.fov += ((s.fov ?? 30) - this.cur.fov) * k3;
+      this.cur.ox += (this.lensX(s) - this.cur.ox) * k3;
+      this.cur.oy += (this.lensY(s) - this.cur.oy) * k3;
     }
-    // visitor orbit inertia
-    if (!this.dragging) {
-      this.user.az += this.userVel.az * dt;
-      this.user.el += this.userVel.el * dt;
-      const k = Math.exp(-dt * 4.5);
+    // visitor orbit inertia (input clock)
+    if (!this.dragging && inputDt > 0) {
+      this.user.az += this.userVel.az * inputDt;
+      this.user.el += this.userVel.el * inputDt;
+      const k = Math.exp(-inputDt * 4.5);
       this.userVel.az *= k;
       this.userVel.el *= k;
     }
-    this.clampUser();
+    if (inputDt > 0) this.clampUser(inputDt);
+    // soft avoidance: a moving robot (or the visitor's orbit) must not reach the lens
+    const tick = dt > 0 ? dt : inputDt;
+    if (tick > 0) {
+      const probe = this.effective();
+      const p = positionOf(probe, _p);
+      const c = this.clearanceAt(p, probe.dist);
+      // the extra distance that would clear it (clearance grows about one for one with distance)
+      const need = c < 0.02 ? Math.min(1.2, this.avoid + (0.02 - c) / Math.max(0.2, probe.dist)) : Math.max(0, this.avoid - 0.5 * tick);
+      const w = 7;
+      this.avoidV += (w * w * (need - this.avoid) - 2 * w * this.avoidV) * tick;
+      this.avoid = Math.max(0, this.avoid + this.avoidV * tick);
+    }
     // velocities of the effective state (for the next transition's start)
     const eff = this.effective();
-    if (prevEff && dt > 0) {
-      const a = 0.35; // smoothed
-      this.vel.t.lerp(eff.target.clone().sub(prevEff.target).divideScalar(dt), a);
-      this.vel.az += (wrap(eff.az - prevEff.az) / dt - this.vel.az) * a;
-      this.vel.el += ((eff.el - prevEff.el) / dt - this.vel.el) * a;
-      this.vel.dist += ((eff.dist - prevEff.dist) / dt - this.vel.dist) * a;
-      this.vel.fov += ((eff.fov - prevEff.fov) / dt - this.vel.fov) * a;
-      this.vel.ox += ((eff.ox - prevEff.ox) / dt - this.vel.ox) * a;
-      this.vel.oy += ((eff.oy - prevEff.oy) / dt - this.vel.oy) * a;
+    if (this.prev && dt > 0 && !planned) {
+      const a = 1 - Math.exp(-dt / 0.03);
+      this.vel.t.lerp(_e.subVectors(eff.target, this.prev.target).divideScalar(dt), a);
+      this.vel.az += (wrap(eff.az - this.prev.az) / dt - this.vel.az) * a;
+      this.vel.el += ((eff.el - this.prev.el) / dt - this.vel.el) * a;
+      this.vel.dist += ((eff.dist - this.prev.dist) / dt - this.vel.dist) * a;
+      this.vel.fov += ((eff.fov - this.prev.fov) / dt - this.vel.fov) * a;
+      this.vel.ox += ((eff.ox - this.prev.ox) / dt - this.vel.ox) * a;
+      this.vel.oy += ((eff.oy - this.prev.oy) / dt - this.vel.oy) * a;
     }
-    this.prev = eff;
+    if (dt > 0 || !this.prev) this.prev = eff;
     this.apply(eff);
   }
 
-  private clampUser() {
+  private clampUser(dt: number) {
     const s = this.shot;
     const o = s?.orbit;
     if (!s || o === false || o === undefined) {
-      this.user.az *= 0.9;
-      this.user.el *= 0.9;
-      this.user.zoom = 1 + (this.user.zoom - 1) * 0.9;
+      // no orbit here: whatever the visitor did eases back
+      const k = Math.exp(-dt * 6.3);
+      this.user.az *= k;
+      this.user.el *= k;
+      this.user.zoom = 1 + (this.user.zoom - 1) * k;
       return;
     }
     if (o.az) this.user.az = MathUtils.clamp(this.user.az, o.az[0], o.az[1]);
@@ -254,20 +456,22 @@ export class Director {
   }
 
   private _p = new Vector3();
-  private _c = new Vector3();
   private apply(s: CamState) {
     const cam = this.camera;
     const p = positionOf(s, this._p);
-    // keep-out: push out of the robot's capsules, stay above the floor and below the ceiling
-    for (const k of this.keepOut) {
-      const ab = this._c.subVectors(k.b, k.a);
-      const t = MathUtils.clamp(new Vector3().subVectors(p, k.a).dot(ab) / Math.max(1e-6, ab.lengthSq()), 0, 1);
-      const closest = k.a.clone().addScaledVector(ab, t);
-      const d = p.distanceTo(closest);
-      if (d < k.r) {
-        const dir = p.clone().sub(closest);
-        if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
-        p.copy(closest).addScaledVector(dir.normalize(), k.r);
+    // last resort: never inside an obstacle
+    for (const list of [this.obstacles(), this.keepOut]) {
+      for (const k of list) {
+        const d = capsuleClearance(k, p);
+        if (d < 0.01) {
+          _ab.subVectors(k.b, k.a);
+          const t = MathUtils.clamp(_ap.subVectors(p, k.a).dot(_ab) / Math.max(1e-6, _ab.lengthSq()), 0, 1);
+          const closest = _e.copy(k.a).addScaledVector(_ab, t);
+          const dir = _ap.subVectors(p, closest);
+          if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
+          p.copy(closest).addScaledVector(dir.normalize(), k.r + 0.01);
+          this.onClamp?.(0.01 - d);
+        }
       }
     }
     p.y = MathUtils.clamp(p.y, this.floor, this.ceiling);
@@ -289,8 +493,12 @@ export class Director {
   // ─────────────────────────── visitor input ───────────────────────────
 
   private pointers = new Map<number, { x: number; y: number }>();
+  /** Recent single-pointer moves (for the fling), with their timestamps (ms). */
+  private trail: { t: number; az: number; el: number }[] = [];
   private pinch0 = 0;
   private zoom0 = 1;
+  /** Pointers something else owns (the IK target being dragged): the camera ignores them. */
+  claimed = new Set<number>();
 
   canOrbit(): boolean {
     return !!this.shot && this.shot.orbit !== false && this.shot.orbit !== undefined;
@@ -298,12 +506,17 @@ export class Director {
 
   attach(el: HTMLElement): () => void {
     const down = (e: PointerEvent) => {
-      if (!this.canOrbit()) return;
+      if (!this.canOrbit() || this.claimed.has(e.pointerId)) return;
       if (e.button !== 0 && e.pointerType === 'mouse') return;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      el.setPointerCapture(e.pointerId);
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* synthetic events have no capture */
+      }
       this.dragging = true;
       this.userVel = { az: 0, el: 0 };
+      this.trail = [];
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
         this.pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
@@ -321,28 +534,42 @@ export class Director {
         const k = 0.0055;
         this.user.az -= dx * k;
         this.user.el += dy * k;
-        const now = 1 / 60;
-        this.userVel.az = (-dx * k) / now;
-        this.userVel.el = (dy * k) / now;
+        this.trail.push({ t: e.timeStamp, az: -dx * k, el: dy * k });
+        while (this.trail.length > 1 && e.timeStamp - this.trail[0].t > 100) this.trail.shift();
       } else if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (this.pinch0 > 0) this.user.zoom = this.zoom0 * (this.pinch0 / Math.max(1, d));
+        this.trail = [];
       }
     };
     const up = (e: PointerEvent) => {
+      if (!this.pointers.has(e.pointerId)) return;
       this.pointers.delete(e.pointerId);
+      if (this.pointers.size === 1) {
+        // one finger left after a pinch: carry on orbiting from here, no jump
+        this.pinch0 = 0;
+        this.trail = [];
+      }
       if (this.pointers.size === 0) {
         this.dragging = false;
-        // keep a little of the fling
-        this.userVel.az = MathUtils.clamp(this.userVel.az * 0.25, -2, 2);
-        this.userVel.el = MathUtils.clamp(this.userVel.el * 0.25, -1, 1);
+        // a fling: the speed of the last ~0.1 s of movement, measured from the events' times
+        const tr = this.trail;
+        if (e.type !== 'pointercancel' && tr.length >= 3 && e.timeStamp - tr[tr.length - 1].t < 60) {
+          const span = Math.max(16, tr[tr.length - 1].t - tr[0].t) / 1000;
+          let az = 0;
+          let elv = 0;
+          for (let i = 1; i < tr.length; i++) (az += tr[i].az), (elv += tr[i].el);
+          this.userVel.az = MathUtils.clamp((az / span) * 0.35, -2, 2);
+          this.userVel.el = MathUtils.clamp((elv / span) * 0.35, -1, 1);
+        }
+        this.trail = [];
       }
     };
     const wheel = (e: WheelEvent) => {
       if (!this.canOrbit()) return;
       e.preventDefault();
-      this.user.zoom *= Math.exp(e.deltaY * 0.0012);
+      this.user.zoom *= Math.exp(MathUtils.clamp(e.deltaY, -120, 120) * 0.0012);
     };
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
@@ -363,8 +590,17 @@ export class Director {
     return Math.abs(this.user.az) > 0.05 || Math.abs(this.user.el) > 0.05 || Math.abs(this.user.zoom - 1) > 0.05;
   }
 
-  /** Return to the directed framing (smoothly). */
+  /** Return to the directed framing (smoothly, from the picture shown). */
   recenter() {
-    if (this.shot) this.go(this.shot, { duration: 1.1 });
+    if (this.shot) {
+      const s = this.shot;
+      this.shot = null;
+      this.go(s, { duration: 1.1 });
+    }
   }
 }
+
+const _e = new Vector3();
+const _p = new Vector3();
+const _sa: CamState = { target: new Vector3(), az: 0, el: 0, dist: 1, fov: 30, ox: 0, oy: 0 };
+const _sb: CamState = { target: new Vector3(), az: 0, el: 0, dist: 1, fov: 30, ox: 0, oy: 0 };

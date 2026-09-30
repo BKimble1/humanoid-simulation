@@ -48,7 +48,8 @@ import { Limits } from './limits';
 import { TourRunner } from './tourRunner';
 import { publishReadouts } from './readouts';
 import { Telemetry } from './telemetry';
-import { handPoses } from '../scene/robot/hand';
+import { RobotProxies } from './proxies';
+import { handToArray, HAND_N } from './handPose';
 import { Mesh, Group, Matrix4, Quaternion, type Object3D } from 'three';
 
 export interface Feature {
@@ -113,6 +114,8 @@ export class World {
   onFrame: ((w: World, dt: number) => void)[] = [];
   /** Developer telemetry (tests and probes only). */
   telemetry = new Telemetry();
+  /** The robot's collision proxies (the camera keeps out of them), from the displayed pose. */
+  proxies = new RobotProxies();
 
   constructor(canvas: HTMLCanvasElement) {
     this.stage = new Stage(canvas);
@@ -135,6 +138,18 @@ export class World {
     this.reach = new ReachSource(() => this.model, this.newKin(cfg.scale));
     this.manip = new ManipSource(() => this.model, this.newKin(cfg.scale));
     this.sources = { idle: this.idle, walk: this.walk, balance: this.balance, exercise: this.exercise, reach: this.reach, manip: this.manip };
+    // energy has one owner per interval: the gait's ticks while walking is the source
+    this.walk.onLoad = (dt, tau, qd) => this.energy.step(dt, tau, qd);
+    this.driver.onForced = (from, to) => this.telemetry.mark('forced-handover', `${from}→${to}`);
+    this.director.obstacles = () => this.proxies.capsules;
+    // a source that takes over after the previous one finished picks up the lab's settings
+    this.driver.onSwitch = (src) => {
+      if (src !== this.walk) return;
+      const l = useLab.getState();
+      this.walk.carry = l.carry;
+      if (l.walking || this.sceneId === 'sim.wholebody') this.walk.start(GAITS[l.gait]);
+    };
+    this.director.onClamp = (by) => this.telemetry.mark('camera-clamp', by.toFixed(3));
     this.overlays = new Overlays(this.body);
     this.limits = new Limits(this);
     this.tour = new TourRunner(this);
@@ -171,10 +186,12 @@ export class World {
     // first pose, first camera
     const p = restPose();
     p.pelvisPos.set(0, 0.89, 0);
-    this.driver.out.copy(p);
-    this.driver.use(this.idle, 0.01);
+    this.driver.reset(p);
+    this.driver.use(this.idle, 0);
     this.driver.update(1 / 60);
-    this.rig.apply(this.driver.out);
+    this.rig.apply(this.driver.out, this.driver.hands);
+    this.kin.update(this.driver.out);
+    this.proxies.update(this.kin);
     this.applyScene(this.sceneFor(useApp.getState()), true);
     progress(0.6);
     await frame();
@@ -234,8 +251,13 @@ export class World {
     if (s.mode !== 'watch' && prev.mode === 'watch') this.tour.stop();
     // leaving the limits lab puts back whatever its scenario changed
     if (this.limits.active && (s.mode !== 'simulate' || s.lab !== 'limits')) this.limits.restore();
-    if (s.mode !== prev.mode || s.system !== prev.system || s.lab !== prev.lab || s.exploded !== prev.exploded || s.actuator !== prev.actuator || s.limit !== prev.limit) {
+    const placeChanged = s.mode !== prev.mode || s.system !== prev.system || s.lab !== prev.lab || s.exploded !== prev.exploded || s.limit !== prev.limit;
+    if (placeChanged) {
       if (s.mode !== 'watch') this.applyScene(this.sceneFor(s));
+    } else if (s.actuator !== prev.actuator && s.mode !== 'watch') {
+      // another actuator: the closed view reframes now; an opened one waits for the old one
+      // to close (see updateAssemblies)
+      if (this.sceneId === 'explore.actuators') this.director.go(this.scene.shot(this), { replan: true });
     }
     if (s.config !== prev.config) this.applyConfig();
   }
@@ -253,7 +275,7 @@ export class World {
     this.reach.side = l.ikSide;
     this.manip.setTask(l.task);
     this.walk.carryMass = this.model.config.payload > 0 ? this.model.config.payload : 10;
-    if (this.driver.source === this.walk && this.sceneId !== 'sim.wholebody') {
+    if (this.driver.source === this.walk && !this.driver.pending && this.sceneId !== 'sim.wholebody') {
       if (l.walking && !this.walk.running) this.walk.start(GAITS[l.gait]);
       else if (l.walking && this.walk.running && this.walk.gait.id !== l.gait) this.walk.start(GAITS[l.gait]);
       else if (!l.walking && this.walk.running) this.walk.stop();
@@ -266,7 +288,12 @@ export class World {
     const def = SCENES[id] ?? SCENES.intro;
     this.sceneId = id;
     this.scene = def;
-    this.ch.to(def.channels);
+    const targets = { ...def.channels };
+    if (useApp.getState().actuator !== this.shownActuator && (this.ch.get('actuatorOut') > 0.001 || this.ch.get('explode') > 0.001)) {
+      targets.actuatorOut = 0;
+      targets.explode = 0;
+    }
+    this.ch.to(targets);
     if (instant) for (const k of Object.keys(def.channels) as ChannelId[]) this.ch.set(k, def.channels[k]!);
     this.director.go(def.shot(this), instant ? { instant: true } : {});
     // pose source (the whole-body view runs whichever motion the visitor picked)
@@ -277,8 +304,10 @@ export class World {
     }
     const src = kind === 'walk' ? this.walk : (this.sources[kind] ?? this.idle);
     if (src === this.idle) this.idle.preset = def.idle ?? 'rest';
-    this.driver.use(src, instant ? 0.01 : 1.0);
-    if (kind === 'walk') {
+    const was = this.driver.source;
+    this.driver.use(src, instant ? 0 : 1.0);
+    if (kind === 'walk' && was === this.walk && this.driver.source === this.walk) {
+      // already walking here (taken back before it handed over): carry on as the lab says
       const l = useLab.getState();
       this.walk.carry = l.carry;
       if (l.walking || id === 'sim.wholebody') this.walk.start(GAITS[l.gait]);
@@ -312,7 +341,7 @@ export class World {
       const f = segmentScale(id, s);
       for (const c of g.children) if (!segs.has(c)) c.scale.y = f;
     }
-    this.walk.enter(this.driver.out);
+    if (this.driver.source === this.walk) this.walk.enter(this.driver.display());
   }
 
   // ─────────────────────────── queries used by shots and features ───────────────────────────
@@ -323,7 +352,7 @@ export class World {
 
   /** Middle of the opened actuator's parts, following the slide-out and the explode. */
   assemblyCentre(): Vector3 {
-    const a = this.assemblies[useApp.getState().actuator];
+    const a = this.assemblies[this.framedActuator];
     if (!a) return this.anchor('kneeActL');
     const p = new Vector3(0, a.asm.L * 0.5 - this.ch.get('explode') * 0.31 * a.asm.spread, 0);
     return p.applyMatrix4(a.holder.matrixWorld);
@@ -453,33 +482,69 @@ export class World {
     }
   }
 
-  /** Slide the selected actuator out of the limb, open it up, turn its motor. */
+  /**
+   * The actuator shown opened (its exterior hidden, its assembly out) — which lags the one
+   * selected: a change of actuator while one is open closes and retracts the open one first,
+   * then slides out and opens the new one, while the camera travels between them. Reversing
+   * midway re-opens the one still out, from where it is.
+   */
+  shownActuator: 'knee' | 'hip' | 'elbow' = 'knee';
+  /** The actuator the open view's camera frames (moves on once the old one has closed). */
+  framedActuator: 'knee' | 'hip' | 'elbow' = 'knee';
+
   private updateAssemblies(dt: number) {
-    const sel = useApp.getState().actuator;
+    const st = useApp.getState();
+    const sel = st.actuator;
     const out = this.ch.get('actuatorOut');
     const ex = this.ch.get('explode');
+    const wantOut = this.scene.channels.actuatorOut ?? 0;
+    const wantEx = this.scene.channels.explode ?? 0;
+    if (sel !== this.shownActuator) {
+      if (out < 0.001 && ex < 0.001) {
+        // the old one is home: the new one is the subject now
+        this.shownActuator = sel;
+        this.telemetry.mark('actuator-subject', sel);
+        if (wantOut > 0 || wantEx > 0) this.ch.toSome({ actuatorOut: wantOut, explode: wantEx });
+      } else if (this.ch.target('actuatorOut') > 0 || this.ch.target('explode') > 0) this.ch.toSome({ actuatorOut: 0, explode: 0 }, 0.72, 0.6);
+    } else if ((wantOut > 0 || wantEx > 0) && (this.ch.target('actuatorOut') !== wantOut || this.ch.target('explode') !== wantEx)) {
+      // back to the one still out (a reversal): open it again from where it is
+      this.ch.toSome({ actuatorOut: wantOut, explode: wantEx });
+    }
+    // the camera stays on the one closing until it is nearly home, then moves to the next
+    const framed = sel !== this.shownActuator && ex < 0.15 && out < 0.5 ? sel : this.shownActuator;
+    if (framed !== this.framedActuator) {
+      this.framedActuator = framed;
+      if (this.sceneId === 'explore.actuators.open') this.director.go(this.scene.shot(this), { replan: true });
+    }
+    // the part in focus must exist in the actuator shown
+    const shown = this.assemblies[this.shownActuator];
+    if (st.part && shown && !shown.asm.parts.some((p) => p.id === st.part)) useApp.getState().set({ part: null });
     // the motor turns at its real duty-cycle speed, slowed (see features/actuatorLive)
     this.rotorAngle = this.actuatorLive.angle;
+    const o2 = this.ch.get('actuatorOut');
+    const e2 = this.ch.get('explode');
     for (const key of Object.keys(this.assemblies) as ('knee' | 'hip' | 'elbow')[]) {
       const a = this.assemblies[key]!;
-      const on = key === sel && (out > 0.001 || ex > 0.001);
+      const on = key === this.shownActuator && (o2 > 0.001 || e2 > 0.001);
       a.holder.visible = on;
-      if (!on) continue;
+      if (!on) {
+        // home in the limb (the camera may already be framing it)
+        a.holder.position.setFromMatrixPosition(a.base);
+        continue;
+      }
       // outwards along the actuator's axis (its rear direction, away from the joint)
-      const dir = new Vector3(0, -1, 0).applyQuaternion(a.holder.quaternion);
-      const basePos = new Vector3().setFromMatrixPosition(a.base);
-      a.holder.position.copy(basePos).addScaledVector(dir, 0.1 * out);
-      a.asm.update(ex, this.rotorAngle);
-      const part = useApp.getState().part;
-      this.partFocus += ((part ? 1 : 0) - this.partFocus) * Math.min(1, dt * 5);
+      const dir = _dir.set(0, -1, 0).applyQuaternion(a.holder.quaternion);
+      a.holder.position.setFromMatrixPosition(a.base).addScaledVector(dir, 0.1 * o2);
+      a.asm.update(e2, this.rotorAngle);
+      const part = st.part;
+      this.partFocus += ((part ? 1 : 0) - this.partFocus) * (1 - Math.exp(-dt * 5));
       if (part) this.focusedPart = part;
-      a.asm.setFocus(this.partFocus > 0.002 ? this.focusedPart : null, this.partFocus * ex);
+      a.asm.setFocus(this.partFocus > 0.002 ? this.focusedPart : null, this.partFocus * e2);
     }
   }
 
   private assemblyHides(rm: RobotMesh): boolean {
-    const sel = useApp.getState().actuator;
-    const a = this.assemblies[sel];
+    const a = this.assemblies[this.shownActuator];
     if (!a || !rm.part) return false;
     const on = this.ch.get('actuatorOut') > 0.001 || this.ch.get('explode') > 0.001;
     return on && (rm.part === a.part || rm.part === `${a.part}:out`);
@@ -487,30 +552,46 @@ export class World {
 
   // ─────────────────────────── frame ───────────────────────────
 
+  /**
+   * One frame. `dt` is the frame's time. The demonstration — the robot, grasps and gait, the
+   * belt, actuators, heat and charge, scene transitions and the tour's timeline — runs on the
+   * presentation clock, which stops while the tour is paused (the interface, the visitor's
+   * own camera moves and hover highlights keep the real clock). Nothing catches up on resume.
+   */
   step(dt: number, render = true) {
-    this.ch.update(dt);
+    const pdt = this.presentationPaused ? 0 : dt;
+    this.ch.update(pdt);
     this.updateHighlight(dt);
     // gaze
     const gz = this.scene.gaze;
-    this.idle.gaze = gz === 'camera' ? this.stage.camera.position.clone() : gz === 'cart' ? new Vector3(0.05, 0.95, 0.75) : null;
-    this.driver.update(dt);
-    this.rig.apply(this.driver.out);
+    if (gz === 'camera') this.idle.gaze = (this.idle.gaze ?? new Vector3()).copy(this.stage.camera.position);
+    else if (gz === 'cart') this.idle.gaze = (this.idle.gaze ?? new Vector3()).set(0.05, 0.95, 0.75);
+    else this.idle.gaze = null;
+    this.driver.update(pdt);
+    this.rig.apply(this.driver.out, this.driver.hands);
     this.rig.root.updateMatrixWorld(true);
     this.lab.moveBelt(this.walk.beltNow - this.lab.beltOffset);
     this.applyCovers();
-    this.updateAssemblies(dt);
+    this.updateAssemblies(pdt);
     this.limits.update();
+    // objects disturbed in the manipulation lab go back while the cart is away
+    if (this.manip.disturbed && this.driver.source !== this.manip && this.driver.target !== this.manip && this.ch.get('cart') < 0.002) {
+      this.manip.putBack();
+      this.telemetry.mark('cart-reset');
+    }
     const src = this.driver.source;
     this.overlays.push = src === this.balance ? this.balance.pushArrow : null;
     this.overlays.extra = src === this.manip ? this.manip.forces : [];
-    for (const f of this.features) f.update(this, dt);
-    for (const cb of this.onFrame) cb(this, dt);
+    for (const f of this.features) f.update(this, pdt);
+    for (const cb of this.onFrame) cb(this, pdt);
     if (time.now - this.readoutsAt > 0.1) {
       this.readoutsAt = time.now;
       publishReadouts(this);
     }
-    this.tour.update(dt);
-    this.director.update(dt);
+    this.tour.update(pdt, dt);
+    this.kin.update(this.driver.out);
+    this.proxies.update(this.kin);
+    this.director.update(pdt, dt);
     this.telemetry.record(this, dt);
     if (render) {
       this.stage.render(dt);
@@ -522,15 +603,27 @@ export class World {
     this.stage.resize(w, h);
   }
 
+  /**
+   * A tour chapter's physical starting point: no limits scenario, no push waiting, the cart's
+   * objects where they belong (put back at once if the cart is away, or by the robot if it is
+   * holding one), and the charge and temperatures of `energy`.
+   */
+  prepareChapter(energy: import('../engine/power').EnergySnapshot | null) {
+    if (this.limits.active) this.limits.restore();
+    this.balance.cancelPush();
+    if (this.driver.source === this.manip || this.driver.target === this.manip) this.manip.restart();
+    else if (this.manip.disturbed || this.manip.stage !== 'rest') this.manip.putBack();
+    if (energy) this.energy.restore(energy);
+    this.telemetry.mark('chapter-reset');
+  }
+
   // ─────────────────────────── telemetry accessors ───────────────────────────
 
   /** The displayed hand pose as numbers (both hands: four fingers, thumb flexion, opposition, spread). */
   displayedHandScalars(): number[] {
-    const o: number[] = [];
-    for (const s of ['L', 'R'] as const) {
-      const h = handPoses[s];
-      o.push(...h.fingers, h.thumbFlex, h.thumbOpp, h.spread);
-    }
+    const o = new Array<number>(HAND_N * 2);
+    handToArray(this.rig.hands.L, o, 0);
+    handToArray(this.rig.hands.R, o, HAND_N);
     return o;
   }
 
@@ -552,9 +645,9 @@ export class World {
     return (Object.keys(this.assemblies) as ('knee' | 'hip' | 'elbow')[]).filter((k) => this.assemblies[k]!.holder.visible);
   }
 
-  /** The demonstration is paused (the guided tour's pause). */
+  /** The demonstration is paused (the guided tour's pause, once a chapter change has settled). */
   get presentationPaused(): boolean {
-    return this.tour.playing && this.tour.paused;
+    return this.tour.holdsPresentation;
   }
 
   dispose() {
@@ -569,6 +662,8 @@ export class World {
     return time.now;
   }
 }
+
+const _dir = new Vector3();
 
 function frame(): Promise<void> {
   return new Promise((r) => requestAnimationFrame(() => r()));

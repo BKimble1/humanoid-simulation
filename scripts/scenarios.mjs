@@ -185,4 +185,75 @@ export const SCENARIOS = {
       await a.advance(150);
     },
   },
+
+  // ───── short clips for the before/after comparison (about 10–14 s each) ─────
+
+  'clip-hands': {
+    async run(a) {
+      await a.set({ mode: 'explore', system: 'overview' });
+      await a.advance(45);
+      await a.set({ mode: 'explore', system: 'hands' });
+      await a.advance(95);
+      await a.set({ mode: 'explore', system: 'actuators' });
+      await a.advance(95);
+      await a.set({ mode: 'explore', system: 'forces' });
+      await a.advance(95);
+    },
+  },
+  'clip-actuator': {
+    async run(a) {
+      await a.set({ mode: 'explore', system: 'actuators', actuator: 'knee' });
+      await a.advance(40);
+      await a.set({ exploded: true });
+      await a.advance(110);
+      await a.set({ actuator: 'hip' });
+      await a.advance(120);
+      await a.set({ actuator: 'elbow' });
+      await a.advance(25);
+      await a.set({ actuator: 'hip' });
+      await a.advance(130);
+    },
+  },
+  'clip-manip': {
+    async run(a) {
+      await a.set({ mode: 'simulate', lab: 'manipulation' });
+      await a.lab({ task: 'tool' });
+      await a.advance(100);
+      await a.eval(() => window.__fab.manip.pick());
+      await a.advance(200);
+      await a.eval(() => window.__fab.manip.place());
+      await a.advance(150);
+    },
+  },
+  'clip-walk': {
+    async run(a) {
+      await a.set({ mode: 'simulate', lab: 'walk' });
+      await a.advance(70);
+      await a.lab({ walking: true, gait: 'normal', carry: false });
+      await a.advance(150);
+      await a.lab({ walking: false });
+      await a.advance(60);
+      await a.set({ mode: 'simulate', lab: 'balance' });
+      await a.advance(90);
+    },
+  },
+  'clip-pause': {
+    async run(a) {
+      await a.set({ mode: 'watch' });
+      await a.advance(5);
+      await a.eval(() => {
+        const w = window.__fab;
+        if (w.tour.jump) return w.tour.jump(9);
+        let g = 20;
+        while (w.tour.index !== 9 && g-- > 0) w.tour.next();
+      });
+      await a.advance(150);
+      await a.eval(() => window.__fab.tour.paused || window.__fab.tour.toggle());
+      await a.advance(90);
+      await a.eval(() => window.__fab.tour.toggle());
+      await a.advance(60);
+      await a.set({ mode: 'intro' });
+      await a.advance(10);
+    },
+  },
 };

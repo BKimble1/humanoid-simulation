@@ -6,6 +6,12 @@
  *
  * While walking, the gait's own 100 Hz dynamics are used (cleaner accelerations); otherwise
  * accelerations come from successive rendered poses, low-pass filtered.
+ *
+ * Energy has one owner at a time. While walking is the robot's source (including the blend
+ * into it), the gait integrates power and heat from its own loads at its 100 Hz ticks; the
+ * last few centimetres of the previous posture still decaying in the display are not counted.
+ * Otherwise this integrates them, from the displayed motion's loads, in fixed 10 ms steps, so
+ * the result does not depend on the frame rate.
  */
 import { Vector2, Vector3 } from 'three';
 import type { Side } from '../../spec/body';
@@ -34,6 +40,9 @@ export class BodyState implements Feature {
   held: Held | null = null;
   /** Energy stepping scale (thermal demos speed heating up). */
   thermalScale = 1;
+  /** Simulated time not yet integrated into the energy model, s. */
+  private eAcc = 0;
+  static readonly ENERGY_DT = 0.01;
 
   update(w: World, dt: number) {
     if (dt <= 0) return;
@@ -63,8 +72,9 @@ export class BodyState implements Feature {
     this.capture.set(c.x + this.comVel.x / omega, 0, c.z + this.comVel.z / omega);
     this.margin = this.support.length >= 3 ? signedDistance(this.support, new Vector2(this.capture.x, this.capture.z)) : -0.1;
     // dynamics: walking uses the gait's own; everything else is computed from the frames
-    const walking = w.driver.source === w.walk && !w.driver.blending && w.walk.last;
+    const walking = w.driver.source === w.walk && w.walk.last;
     if (walking) {
+      this.eAcc = 0;
       const r = w.walk.last!;
       this.tau.set(r.tau);
       this.qd.set(r.qd);
@@ -93,6 +103,11 @@ export class BodyState implements Feature {
       R: { force: r.grf.R.force.clone(), cop: r.grf.R.cop.clone(), load: r.grf.R.load },
     };
     this.zmp.copy(r.zmp);
-    w.energy.step(dt, this.tau, this.qd, this.thermalScale);
+    this.eAcc += dt;
+    const h = BodyState.ENERGY_DT;
+    for (let guard = 0; this.eAcc >= h && guard < 40; guard++) {
+      w.energy.step(h, this.tau, this.qd, this.thermalScale);
+      this.eAcc -= h;
+    }
   }
 }

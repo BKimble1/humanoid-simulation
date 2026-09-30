@@ -93,4 +93,26 @@ describe('walking pattern', () => {
     expect(Math.abs(f.com.z - mid - 0.03)).toBeLessThan(0.01);
     expect(Math.abs(f.comVel.z)).toBeLessThan(0.01);
   });
+
+  it('stopped at any moment of starting, changing gait or walking, no foot ever jumps', () => {
+    // a foot moves at most a swing's speed (< 6 m/s): 6 cm per 10 ms tick is a jump
+    for (const stopAt of [5, 20, 60, 90, 130, 170, 260]) {
+      for (const change of [false, true]) {
+        const gen = new GaitGenerator();
+        gen.walk(GAITS.normal);
+        let prev = { L: gen.frame.feet.L.ankle.clone(), R: gen.frame.feet.R.ankle.clone() };
+        let worst = 0;
+        for (let i = 0; i < 700; i++) {
+          if (change && i === Math.floor(stopAt / 2)) gen.walk(GAITS.fast);
+          if (i === stopAt) gen.stop();
+          gen.tick();
+          for (const s of ['L', 'R'] as SideKey[]) worst = Math.max(worst, gen.frame.feet[s].ankle.distanceTo(prev[s]));
+          prev = { L: gen.frame.feet.L.ankle.clone(), R: gen.frame.feet.R.ankle.clone() };
+        }
+        expect(worst, `stop at tick ${stopAt}${change ? ' after a gait change' : ''}`).toBeLessThan(0.06);
+        expect(gen.frame.walking).toBe(false);
+      }
+    }
+  });
 });
+

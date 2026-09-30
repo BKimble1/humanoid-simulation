@@ -125,6 +125,8 @@ export class GaitGenerator {
   private phases: Phase[] = [];
   t = 0;
   gait: GaitSpec = GAITS.normal;
+  /** The gait parameters the posture uses: the current phase's, reached smoothly. */
+  private shown: GaitSpec = { ...GAITS.normal };
   /** Keep appending steps (continuous walking) until stop() is called. */
   private continuous = false;
   private stopping = false;
@@ -253,10 +255,13 @@ export class GaitGenerator {
     let keep = i + 1;
     if (this.phases[i].kind === 'SS' && this.phases[i + 1]?.kind === 'DS') keep = i + 2;
     this.phases.length = Math.min(this.phases.length, keep);
-    // rebuild the footstep memory from what is kept
+    // rebuild the footstep memory from what is kept: each foot where it stands now, or where
+    // the step under way puts it (never a footstep of the plan just dropped)
+    for (const s of ['L', 'R'] as SideKey[]) this.last[s] = { ...this.stepUnder(s, t) };
     for (const p of this.phases) if (p.kind === 'SS') this.last[p.swing!] = { ...p.land! };
     const lastSS = [...this.phases].reverse().find((p) => p.kind === 'SS');
     if (lastSS) this.nextSwing = lastSS.swing === 'L' ? 'R' : 'L';
+    else if (this.phases[i].kind === 'DS' && this.phases[i].trailing) this.nextSwing = this.phases[i].trailing!;
   }
 
   /** Append footsteps until the plan covers the preview horizon. */
@@ -385,7 +390,21 @@ export class GaitGenerator {
     f.zmpRef.set(r.x, 0, r.y);
     const p = this.phaseAt(t);
     f.walking = !!p;
-    f.gait = p?.gait ?? this.gait;
+    // the posture's gait parameters (stance knee, step length, speed…) follow the phase's gait
+    // smoothly, so a change of gait bends the knees and lengthens the stride over a few tenths
+    // of a second instead of at one tick
+    const g = p?.gait ?? this.gait;
+    const b = this.shown;
+    const k = 1 - Math.exp(-this.dt / 0.3);
+    b.id = g.id;
+    b.label = g.label;
+    b.speed += (g.speed - b.speed) * k;
+    b.stepLength += (g.stepLength - b.stepLength) * k;
+    b.stepTime += (g.stepTime - b.stepTime) * k;
+    b.doubleSupport += (g.doubleSupport - b.doubleSupport) * k;
+    b.clearance += (g.clearance - b.clearance) * k;
+    b.stanceKnee += (g.stanceKnee - b.stanceKnee) * k;
+    f.gait = b;
     // default: both feet flat on their last footsteps
     for (const s of ['L', 'R'] as SideKey[]) {
       const foot = f.feet[s];
@@ -484,7 +503,7 @@ export class GaitGenerator {
       const T = p.t1 - p.t0;
       if (first) sigma = 1 - rate * T * (1 - u) * u * u * u;
       else if (last) sigma = ss + rate * T * u * (1 - u) ** 3;
-      const centre = 1 - p.gait.doubleSupport / 2;
+      const centre = 1 - this.shown.doubleSupport / 2;
       f.bob = (1 + Math.cos(2 * Math.PI * (sigma - centre))) / 2;
     } else f.bob = 0;
     f.envelope = env;

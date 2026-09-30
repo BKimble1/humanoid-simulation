@@ -81,6 +81,15 @@ const ANKLES: Record<'L' | 'R', { pitch: number; roll: number }> = {
   R: { pitch: JOINT_INDEX.R_ankle_pitch, roll: JOINT_INDEX.R_ankle_roll },
 };
 
+export interface EnergySnapshot {
+  soc: number;
+  packC: number;
+  computeT: number;
+  driveT: Float64Array;
+  thermal: ([number, number] | null)[];
+  ankle: [number, number][];
+}
+
 export class BodyEnergy {
   model: RobotModel;
   thermal: (ActuatorThermal | null)[];
@@ -108,6 +117,30 @@ export class BodyEnergy {
     this.ankleCfg = ankleActuatorConfig(model.pack.nominalV);
     this.ankleThermal = [0, 1, 2, 3].map(() => new ActuatorThermal(this.ankleCfg.motor, 32));
     this.driveT = new Float64Array(NJ).fill(33);
+  }
+
+  /** The whole thermal and charge state (to put back later, e.g. at a tour chapter's start). */
+  snapshot(): EnergySnapshot {
+    return {
+      soc: this.pack.soc,
+      packC: this.pack.tempC,
+      computeT: this.computeT,
+      driveT: Float64Array.from(this.driveT),
+      thermal: this.thermal.map((t) => (t ? [t.Tw, t.Th] : null)),
+      ankle: this.ankleThermal.map((t) => [t.Tw, t.Th]),
+    };
+  }
+
+  restore(s: EnergySnapshot) {
+    this.pack.soc = s.soc;
+    this.pack.tempC = s.packC;
+    this.computeT = s.computeT;
+    this.driveT.set(s.driveT);
+    this.thermal.forEach((t, i) => {
+      const v = s.thermal[i];
+      if (t && v) (t.Tw = v[0]), (t.Th = v[1]);
+    });
+    this.ankleThermal.forEach((t, i) => ((t.Tw = s.ankle[i][0]), (t.Th = s.ankle[i][1])));
   }
 
   /** Swap in a new configuration, keeping temperatures and charge. */

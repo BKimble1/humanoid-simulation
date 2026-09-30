@@ -10,7 +10,7 @@ import { BODY_DOF, DIM, HAND } from '../spec/body';
 import { HEAD_CAMERAS } from '../spec/sensing';
 import { configureActuator, ratings } from '../engine/actuator';
 import { packSpec } from '../engine/battery';
-import { RobotModel } from '../engine/robot';
+import { RobotModel, type RobotConfig } from '../engine/robot';
 import type { LabParams } from '../state/store';
 import type { World } from '../world/world';
 
@@ -27,6 +27,8 @@ export interface Chapter {
   duration: number;
   caption: string;
   lab?: Partial<LabParams>;
+  /** Design changes for this chapter (on top of the default design). */
+  config?: Partial<RobotConfig>;
   /** Called once when the chapter starts. */
   start?: (w: World) => void;
   /** Timed actions within the chapter (seconds from its start). */
@@ -130,7 +132,7 @@ export const TOUR: Chapter[] = [
     scene: 'engineer',
     duration: 17,
     caption: 'Now ask too much: a 30 kg box, half again the rated load. Six tasks rerun through the inverse dynamics and the thermal models: the arms would overheat holding it and the ankles run out of torque walking with it. Each limit comes with what would fix it.',
-    start: (w) => w.tour.setConfig({ payload: 30 }),
+    config: { payload: 30 },
   },
   {
     id: 'end',
@@ -138,7 +140,6 @@ export const TOUR: Chapter[] = [
     scene: 'explore.overview',
     duration: 10,
     caption: 'Explore its systems, change its design in Engineer, or run the labs in Simulate.',
-    start: (w) => w.tour.setConfig(null),
   },
 ];
 

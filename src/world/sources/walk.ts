@@ -11,7 +11,7 @@
  * overlays and readouts.
  */
 import { Quaternion, Vector3 } from 'three';
-import { DIM, type Side } from '../../spec/body';
+import type { Side } from '../../spec/body';
 import { GAITS, LOCOMOTION, type GaitSpec } from '../../spec/motion';
 import { footPolygon } from '../../engine/balance';
 import { GaitGenerator, type GaitFrame } from '../../engine/gait';
@@ -21,7 +21,8 @@ import type { RobotModel } from '../../engine/robot';
 import { JOINT_INDEX, Kinematics, Pose } from '../../engine/skeleton';
 import { solveLeg } from '../../engine/ik';
 import { poseFromGait } from '../../engine/wholebody';
-import type { FootPose, Held, PoseSource } from '../pose';
+import { bothHands, relax } from '../handPose';
+import type { DisplayState, FootPose, Held, PoseSource } from '../pose';
 
 interface Snap {
   com: Vector3;
@@ -35,7 +36,11 @@ interface Snap {
 export class WalkSource implements PoseSource {
   id = 'walk';
   pose = new Pose();
-  feet: Record<Side, FootPose> = { L: { ankle: new Vector3(), quat: new Quaternion() }, R: { ankle: new Vector3(), quat: new Quaternion() } };
+  feet: Record<Side, FootPose> = { L: { ankle: new Vector3(), quat: new Quaternion(), contact: 'planted', support: 'belt' }, R: { ankle: new Vector3(), quat: new Quaternion(), contact: 'planted', support: 'belt' } };
+  hands = bothHands();
+  /** Called at every 100 Hz planning tick with the joint loads (the world integrates the
+   * energy from these while walking is what the robot does: one owner per interval). */
+  onLoad: ((dt: number, tau: Float64Array, qd: Float64Array) => void) | null = null;
   gen: GaitGenerator;
   gait: GaitSpec = GAITS.normal;
   carry = false;
@@ -59,6 +64,10 @@ export class WalkSource implements PoseSource {
   /** The last 4 s at 100 Hz: vertical ground reaction per foot (N), battery power (W), knee torques (Nm). */
   trace = { fl: [] as number[], fr: [] as number[], p: [] as number[], kl: [] as number[], kr: [] as number[] };
 
+  get posture(): string {
+    return this.carry ? 'carry' : 'free';
+  }
+
   constructor(
     private model: () => RobotModel,
     private kin: Kinematics,
@@ -69,14 +78,17 @@ export class WalkSource implements PoseSource {
     this.frame = this.gen.frame;
   }
 
-  enter(from: Pose) {
-    // start in the belt frame where the robot stands now
-    this.kin.update(from);
-    const l = this.kin.point('L_foot', [0, 0, 0]);
-    const r = this.kin.point('R_foot', [0, 0, 0]);
+  enter(from: DisplayState) {
+    // start in the belt frame where the robot stands now, each foot where it is displayed
+    const l = from.feet.L.ankle;
+    const r = from.feet.R.ankle;
     this.origin.set((l.x + r.x) / 2, 0, (l.z + r.z) / 2);
+    const yaw = (q: Quaternion) => {
+      const f = new Vector3(0, 0, 1).applyQuaternion(q);
+      return Math.atan2(f.x, f.z);
+    };
     this.gen = new GaitGenerator(
-      { L: { side: 'L', x: DIM.hipHalfWidth, z: 0, yaw: 0 }, R: { side: 'R', x: -DIM.hipHalfWidth, z: 0, yaw: 0 } },
+      { L: { side: 'L', x: l.x - this.origin.x, z: l.z - this.origin.z, yaw: yaw(from.feet.L.quat) }, R: { side: 'R', x: r.x - this.origin.x, z: r.z - this.origin.z, yaw: yaw(from.feet.R.quat) } },
       LOCOMOTION.comHeight - 0.015,
     );
     this.dyn = new MotionDynamics(this.model());
@@ -84,8 +96,19 @@ export class WalkSource implements PoseSource {
     this.beltSpeed = 0;
     this.prev = this.cur = null;
     this.acc = 0;
+    this.running = false;
     this.tick();
     this.tick();
+  }
+
+  /** Asked to hand over: walking comes to a stop through a normal final step. */
+  release() {
+    this.stop();
+  }
+
+  releasable(): boolean {
+    const f = this.gen.frame;
+    return !f.walking && Math.abs(this.beltSpeed) < 0.01 && f.feet.L.contact !== 'air' && f.feet.R.contact !== 'air';
   }
 
   start(gait: GaitSpec) {
@@ -143,7 +166,7 @@ export class WalkSource implements PoseSource {
     const pay = this.carry ? this.kin.palm('L').add(this.kin.palm('R')).multiplyScalar(0.5) : null;
     this.last = this.dyn.update(this.tickPose, dt, contacts, pay, this.carry ? this.carryMass : 0);
     const e = this.energy();
-    e.step(dt, this.last.tau, this.last.qd);
+    this.onLoad?.(dt, this.last.tau, this.last.qd);
     const tr = this.trace;
     tr.fl.push(this.last.grf.L.force.y);
     tr.fr.push(this.last.grf.R.force.y);
@@ -186,10 +209,20 @@ export class WalkSource implements PoseSource {
     for (const s of ['L', 'R'] as Side[]) {
       this.feet[s].ankle.lerpVectors(a.feet[s].ankle, b.feet[s].ankle, u).add(new Vector3(o.x, 0, o.z - beltNow));
       this.feet[s].quat.slerpQuaternions(a.feet[s].quat, b.feet[s].quat, u);
+      this.feet[s].contact = (u < 0.5 ? a : b).feet[s].contact === 'air' ? 'swing' : 'planted';
+      this.feet[s].support = 'belt';
       // re-solve the leg to the interpolated foot so a planted foot stays exactly planted
       solveLeg(this.pose, s, this.feet[s].ankle, this.feet[s].quat, this.kin.scale);
     }
     this.beltNow = beltNow;
+    relax(this.hands.L, this.carry ? 0 : 0.04);
+    relax(this.hands.R, this.carry ? 0 : 0.04);
+    if (this.carry)
+      for (const h of [this.hands.L, this.hands.R]) {
+        h.fingers = [0.5, 0.5, 0.52, 0.54];
+        h.thumbFlex = 0.3;
+        h.thumbOpp = 0.45;
+      }
     if (this.carry) {
       this.kin.update(this.pose);
       const pos = this.kin.palm('L').add(this.kin.palm('R')).multiplyScalar(0.5);

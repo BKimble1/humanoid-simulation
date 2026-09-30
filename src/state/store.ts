@@ -139,7 +139,8 @@ export interface LabParams {
   wholeMotion: 'walk' | 'balance' | 'reach';
 }
 
-export const useLab = create<LabParams & { set: (p: Partial<LabParams>) => void }>((set) => ({
+/** The labs' settings as a first visit finds them. */
+export const LAB_DEFAULTS: Readonly<LabParams> = {
   jointTarget: 20,
   jointSpeed: 180,
   jointRatio: 30,
@@ -156,5 +157,10 @@ export const useLab = create<LabParams & { set: (p: Partial<LabParams>) => void 
   showWorkspace: true,
   task: 'box',
   wholeMotion: 'walk',
+};
+
+export const useLab = create<LabParams & { set: (p: Partial<LabParams>) => void }>((set) => ({
+  ...LAB_DEFAULTS,
   set: (p) => set(p),
 }));
+

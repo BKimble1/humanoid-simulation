@@ -22,8 +22,8 @@ import { solveArm } from '../../engine/ik';
 import type { RobotModel } from '../../engine/robot';
 import { DEG, Kinematics, Pose } from '../../engine/skeleton';
 import { carryArms, flatFoot, solvePosture } from '../../engine/wholebody';
-import { handPoses } from '../../scene/robot/hand';
-import type { FootPose, Held, PoseSource } from '../pose';
+import { bothHands, relax } from '../handPose';
+import type { DisplayState, FootPose, Held, PoseSource } from '../pose';
 
 export type BalanceTask = 'stand' | 'squat' | 'lean' | 'shift' | 'oneFoot' | 'lift';
 
@@ -54,8 +54,11 @@ export class BalanceSource implements PoseSource {
   id = 'balance';
   pose = new Pose();
   feet: Record<Side, FootPose>;
+  hands = bothHands();
   held: Held | null = null;
   thermalScale = 1;
+  /** Asked to hand over: stand (feet together, box down) and take no pushes. */
+  private leaving = false;
   task: BalanceTask = 'stand';
   /** Thermal demonstration: squats in a loop, heating sped up. */
   exercise = false;
@@ -105,25 +108,55 @@ export class BalanceSource implements PoseSource {
     this.box.copy(LIFT_BOX.rest);
   }
 
-  enter(from: Pose) {
-    this.kin.update(from);
+  enter(from: DisplayState) {
+    this.kin.update(from.pose);
     this.phase = 'task';
     this.rec = null;
     this.pushArrow = null;
-    this.stance.L.set(DIM.hipHalfWidth, 0);
-    this.stance.R.set(-DIM.hipHalfWidth, 0);
-    this.pose.copy(from);
+    this.leaving = false;
+    this.pending = null;
+    this.pose.copy(from.pose);
     const legLen = DIM.thigh * this.kin.scale.thigh + DIM.shin * this.kin.scale.shin;
     this.stand = DIM.ankleHeight + legLen * Math.cos(12 * DEG) - 0.004;
-    this.h.x = from.pelvisPos.y;
+    this.h.x = from.pose.pelvisPos.y;
     this.h.v = 0;
+    // start from the displayed stance and COM; displaced feet are walked back to the stance
+    this.stance.L.set(from.feet.L.ankle.x, from.feet.L.ankle.z);
+    this.stance.R.set(from.feet.R.ankle.x, from.feet.R.ankle.z);
+    const com = this.model().com(this.kin);
+    this.comX.x = com.x;
+    this.comZ.x = com.z;
+    this.comX.v = this.comZ.v = 0;
+    this.footR.x = Math.max(0, from.feet.R.ankle.y - DIM.ankleHeight);
+    this.footR.v = 0;
+    this.feet = this.footTargets(this.footR.x);
+    if (this.footR.x < 0.004) this.beginReturn();
+  }
+
+  release() {
+    this.leaving = true;
+    this.pending = null;
+  }
+
+  resume() {
+    this.leaving = false;
+  }
+
+  releasable(): boolean {
+    if (this.exercise) return true;
+    return this.phase === 'task' && this.lift === 0 && this.footR.x < 0.002 && !this.pending;
   }
 
   private pending: { force: number; dir: 'front' | 'back' | 'left' | 'right' } | null = null;
 
+  /** Forget a push not yet applied (a recovery under way carries on to its end). */
+  cancelPush() {
+    this.pending = null;
+  }
+
   /** Push as soon as the robot is standing still (it may first have to stand up). */
   queuePush(forceN: number, dir: 'front' | 'back' | 'left' | 'right') {
-    if (this.phase !== 'task') return;
+    if (this.phase !== 'task' || this.leaving) return;
     this.pending = { force: forceN, dir };
   }
 
@@ -185,7 +218,7 @@ export class BalanceSource implements PoseSource {
       return this.updatePush(dt, model);
     }
     const hw = this.stance.L.x;
-    const task = this.task;
+    const task = this.leaving && !this.exercise ? 'stand' : this.task;
     const onOne = task === 'oneFoot';
     // COM over the left foot before the right lifts; foot down before the COM comes back
     const comXTarget = onOne || this.footR.x > 0.004 ? hw - 0.004 : task === 'shift' ? hw * 0.85 : 0;
@@ -277,12 +310,18 @@ export class BalanceSource implements PoseSource {
       this.held = { pos: this.box.clone(), mass: LIFT_BOX.mass, hands: 'both' };
     } else this.box.copy(LIFT_BOX.rest);
     const grip = holding ? 0.62 : 0.14 + 0.2 * reach;
-    handPoses.L.fingers = [grip, grip, grip, grip];
-    handPoses.R.fingers = [grip, grip, grip, grip];
+    for (const hp of [this.hands.L, this.hands.R]) {
+      relax(hp);
+      hp.fingers = [grip, grip, grip + 0.02, grip + 0.04];
+      hp.thumbFlex = 0.1 + 0.35 * Math.min(1, grip / 0.62);
+      hp.thumbOpp = 0.2 + 0.35 * Math.min(1, grip / 0.62);
+    }
     this.aimHead(u > 0 ? -0.35 * reach : this.task === 'oneFoot' ? -0.15 : 0);
   }
 
   private updatePush(dt: number, model: RobotModel) {
+    relax(this.hands.L);
+    relax(this.hands.R);
     const rec = this.rec!;
     const s = rec.s;
     if (this.phase === 'push') {
@@ -375,6 +414,8 @@ export class BalanceSource implements PoseSource {
   }
 
   private updateReturn(dt: number, model: RobotModel) {
+    relax(this.hands.L);
+    relax(this.hands.R);
     const r = this.ret[0];
     if (!r) {
       this.phase = 'task';

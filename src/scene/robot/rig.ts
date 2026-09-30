@@ -10,7 +10,8 @@
 import { BufferAttribute, BufferGeometry, Group, Matrix4, Mesh, Object3D, Vector3 } from 'three';
 import { clean } from '../geo/merge';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { JOINTS, type SegmentId, type Subsystem } from '../../spec/body';
+import { JOINTS, type SegmentId, type Side, type Subsystem } from '../../spec/body';
+import { bothHands, copyHand, type HandPose } from '../../world/handPose';
 import { type LimbScale, UNIT_SCALE, jointOrigin, type Pose, SEGMENTS } from '../../engine/skeleton';
 import { fadeTwin, ghostMaterial, lookAttributes, robotSurface, type FabMaterial, type LookName } from '../materials';
 
@@ -163,7 +164,14 @@ export class RobotRig {
     this.pending.clear();
   }
 
-  apply(pose: Pose) {
+  /** The displayed hand poses (set with the body pose; read by the hands' onPose). */
+  hands: Record<Side, HandPose> = bothHands();
+
+  apply(pose: Pose, hands?: Readonly<Record<Side, HandPose>>) {
+    if (hands) {
+      copyHand(this.hands.L, hands.L);
+      copyHand(this.hands.R, hands.R);
+    }
     const pel = this.seg.get('pelvis')!;
     pel.position.copy(pose.pelvisPos);
     pel.quaternion.copy(pose.pelvisQuat);

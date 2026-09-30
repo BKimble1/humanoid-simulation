@@ -12,23 +12,9 @@ import { HAND, type Side } from '../../spec/body';
 import { loft } from '../geo/loft';
 import type { RobotRig } from './rig';
 import { T } from './build';
+import type { HandPose } from '../../world/handPose';
 
-export interface HandPose {
-  /** Flexion of index, middle, ring and little fingers, 0 (open) … 1 (closed fist). */
-  fingers: [number, number, number, number];
-  /** Thumb flexion (towards the palm) and opposition (across it), 0 … 1. */
-  thumbFlex: number;
-  thumbOpp: number;
-  /** Spread of the fingers (abduction), 0 … 1. */
-  spread: number;
-}
-
-export const OPEN_HAND: HandPose = { fingers: [0.12, 0.12, 0.14, 0.16], thumbFlex: 0.1, thumbOpp: 0.2, spread: 0.1 };
-
-export const handPoses: Record<Side, HandPose> = {
-  L: { ...OPEN_HAND, fingers: [...OPEN_HAND.fingers] },
-  R: { ...OPEN_HAND, fingers: [...OPEN_HAND.fingers] },
-};
+export type { HandPose };
 
 const DEG = Math.PI / 180;
 
@@ -128,7 +114,7 @@ export function buildHand(rig: RobotRig, side: Side) {
   const axis = new Vector3(0, 0, -s);
   const X = new Vector3(1, 0, 0);
   rig.onPose.push(() => {
-    const hp = handPoses[side];
+    const hp = rig.hands[side];
     for (const j of joints) {
       const v = hp.fingers[j.finger];
       const spread = (j.finger - 1.5) * hp.spread * 5 * DEG;

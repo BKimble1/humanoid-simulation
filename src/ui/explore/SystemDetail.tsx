@@ -126,7 +126,7 @@ export function PowerLive() {
   );
 }
 
-export function ThermalLive({ world }: { world: World }) {
+export function ThermalLive() {
   const r = useApp((s) => s.readouts);
   const hist = useRef<number[]>([]);
   useEffect(() => {
@@ -135,7 +135,6 @@ export function ThermalLive({ world }: { world: World }) {
   }, [r]);
   const series = useMemo(() => [{ label: 'Hottest winding', color: '#ff8a74', values: () => hist.current }], []);
   const T = Number(r.hottestC ?? 30);
-  void world;
   return (
     <div className="lab">
       <p className="note-small">FO-H1 is doing squats; heating is sped up 40× so minutes pass in seconds.</p>

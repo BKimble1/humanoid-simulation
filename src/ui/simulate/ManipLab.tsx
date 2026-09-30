@@ -26,7 +26,6 @@ export function ManipLab({ world }: { world: World }) {
   const l = useLab();
   const r = useApp((s) => s.readouts);
   const m = world.manip;
-  const h = m.sim.history;
   const force = useMemo(
     () => [
       { label: 'Grip (normal)', color: '#ffc86b', values: () => world.manip.sim.history.map((x) => x.normal) },
@@ -35,7 +34,6 @@ export function ManipLab({ world }: { world: World }) {
     [world],
   );
   const vib = useMemo(() => [{ label: 'Tactile vibration', color: '#ff8a74', values: () => world.manip.sim.history.map((x) => x.vibration) }], [world]);
-  void h;
   const obj = OBJECTS[l.task === 'shelf' ? 'box' : l.task];
   const stage = String(r.mStage ?? 'rest');
   const holding = stage === 'hold';

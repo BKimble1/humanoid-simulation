@@ -156,8 +156,7 @@ export class Lab {
   constructor() {
     const g = this.group;
     // floor
-    const { color, rough } = floorTexture();
-    void rough;
+    const { color } = floorTexture();
     const floorMat = new MeshStandardMaterial({ map: color, roughness: 0.58, metalness: 0.0, envMapIntensity: 0.28 });
     const floor = new Mesh(new PlaneGeometry(40, 40), floorMat);
     floor.rotation.x = -Math.PI / 2;

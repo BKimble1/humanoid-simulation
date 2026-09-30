@@ -50,7 +50,7 @@ function useDesign(config: AppState['config']): { report: DesignSummary | null; 
   return { report, busy };
 }
 
-export function EngineerPanel({ world }: { world: World }) {
+export function EngineerPanel(_props: { world: World }) {
   const tab = useApp((s) => s.engineerTab);
   const sheetMin = useApp((s) => s.sheetMin);
   const set = useApp((s) => s.set);
@@ -61,7 +61,6 @@ export function EngineerPanel({ world }: { world: World }) {
   const la = config.legActuator;
   const knee = ratings(configureActuator(ACTUATORS.A100, packSpec(config.pack).nominalV, la));
   const pack = packSpec(config.pack);
-  void world;
   return (
     <aside className={`side side--wide panel pe ${sheetMin ? 'side--min' : ''}`} aria-labelledby="eng-title">
         <SheetHandle />

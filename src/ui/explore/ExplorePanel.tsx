@@ -55,7 +55,7 @@ export function ExplorePanel({ world }: { world: World }) {
         {system === 'actuators' && <ActuatorDetail world={world} />}
         {system === 'vision' && <VisionView world={world} />}
         {system === 'power' && <PowerLive />}
-        {system === 'thermal' && <ThermalLive world={world} />}
+        {system === 'thermal' && <ThermalLive />}
         {(system === 'balance' || system === 'forces') && <BalanceLive />}
         {!focused && (
           <div className="specs">

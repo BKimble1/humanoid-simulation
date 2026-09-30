@@ -142,7 +142,7 @@ function gridToGeometry(grids: { grid: Grid; flip: boolean }[], extra: { pos: nu
 }
 
 /** A cap fan closing a ring (flat) or a dome of rings rising to a point (round). */
-function capRings(last: Required<Section>, radial: number, a0: number, a1: number, closed: boolean, dir: 1 | -1, dome: number): Required<Section>[] {
+function capRings(last: Required<Section>, dir: 1 | -1, dome: number): Required<Section>[] {
   const out: Required<Section>[] = [];
   const steps = 7;
   for (let k = 1; k <= steps; k++) {
@@ -151,10 +151,6 @@ function capRings(last: Required<Section>, radial: number, a0: number, a1: numbe
     const f = Math.cos(ang);
     out.push({ ...last, y: last.y + dir * dome * Math.sin(ang), w: Math.max(1e-4, last.w * f), d: Math.max(1e-4, last.d * f), front: last.front * f });
   }
-  void radial;
-  void a0;
-  void a1;
-  void closed;
   return out;
 }
 
@@ -165,8 +161,8 @@ export function loft(sections: Section[], opts: LoftOptions = {}): BufferGeometr
   const closed = !opts.arc;
   let secs = interpSections(sections, perSpan);
   // round caps become extra rings
-  if (opts.capBottom && typeof opts.capBottom === 'object') secs = [...capRings(secs[0], radial, a0, a1, closed, -1, opts.capBottom.dome).reverse(), ...secs];
-  if (opts.capTop && typeof opts.capTop === 'object') secs = [...secs, ...capRings(secs[secs.length - 1], radial, a0, a1, closed, 1, opts.capTop.dome)];
+  if (opts.capBottom && typeof opts.capBottom === 'object') secs = [...capRings(secs[0], -1, opts.capBottom.dome).reverse(), ...secs];
+  if (opts.capTop && typeof opts.capTop === 'object') secs = [...secs, ...capRings(secs[secs.length - 1], 1, opts.capTop.dome)];
   const outer = buildGrid(secs, radial, a0, a1, closed);
   const grids: { grid: Grid; flip: boolean }[] = [{ grid: outer, flip: false }];
   const extra: { pos: number[]; idx: number[] }[] = [];

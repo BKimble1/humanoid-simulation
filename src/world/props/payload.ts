@@ -67,14 +67,13 @@ export class PayloadProp {
     this.stand.visible = false;
   }
 
-  private label(g: { g: Group; mats: MeshPhysicalMaterial[] }, text: string) {
+  /** The carried crate shows its mass: a new crate when the mass changes. */
+  private label(text: string) {
     if (text === this.carriedLabel) return;
     this.carriedLabel = text;
-    const old = this.carried;
-    this.root.remove(old.g);
+    this.root.remove(this.carried.g);
     this.carried = crate(text);
     this.root.add(this.carried.g);
-    void g;
   }
 
   update(w: World, dt: number) {
@@ -85,7 +84,7 @@ export class PayloadProp {
     this.alpha += (want - this.alpha) * Math.min(1, dt * 5);
     const c = this.carried;
     c.g.visible = this.alpha > 0.01;
-    if (held) this.label(c, `${held.mass.toFixed(held.mass % 1 ? 1 : 0)} kg`);
+    if (held) this.label(`${held.mass.toFixed(held.mass % 1 ? 1 : 0)} kg`);
     if (this.carried.g.visible) {
       const pl = w.kin.palm('L');
       const pr = w.kin.palm('R');

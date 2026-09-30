@@ -5,7 +5,7 @@
  * interest. Presets move the arms for presentations (a hand raised to be looked at).
  * Everything goes through the COM-constrained posture solver, so the drawn COM is real.
  */
-import { Quaternion, Vector2, Vector3 } from 'three';
+import { Vector2, Vector3 } from 'three';
 import { DIM, type JointId, type Side } from '../../spec/body';
 import { solveArm } from '../../engine/ik';
 import type { RobotModel } from '../../engine/robot';
@@ -204,4 +204,3 @@ export class IdleSource implements PoseSource {
   }
 }
 
-export { Quaternion };

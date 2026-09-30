@@ -8,7 +8,7 @@
  * accelerations come from successive rendered poses, low-pass filtered.
  */
 import { Vector2, Vector3 } from 'three';
-import { DIM, type Side } from '../../spec/body';
+import type { Side } from '../../spec/body';
 import { GRAVITY, LOCOMOTION } from '../../spec/motion';
 import { convexHull, signedDistance, type P2 } from '../../engine/balance';
 import { MotionDynamics, type DynamicsResult, type FootContact } from '../../engine/motionDynamics';
@@ -94,6 +94,5 @@ export class BodyState implements Feature {
     };
     this.zmp.copy(r.zmp);
     w.energy.step(dt, this.tau, this.qd, this.thermalScale);
-    void DIM;
   }
 }

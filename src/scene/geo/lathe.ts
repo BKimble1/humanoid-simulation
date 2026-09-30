@@ -33,7 +33,7 @@ export function lathe(profile: PPoint[], segments = 64, phiStart = 0, phiLength 
   for (const run of runs) {
     if (run.length < 2) continue;
     // 2-D normals of the run's vertices (outward: rotate the tangent by −90°)
-    const n2: [number, number][] = run.map((p, i) => {
+    const n2: [number, number][] = run.map((_p, i) => {
       const a = run[Math.max(0, i - 1)];
       const b = run[Math.min(run.length - 1, i + 1)];
       let tx = b.r - a.r;
@@ -41,7 +41,6 @@ export function lathe(profile: PPoint[], segments = 64, phiStart = 0, phiLength 
       const l = Math.hypot(tx, ty) || 1;
       tx /= l;
       ty /= l;
-      void p;
       return [ty, -tx];
     });
     const base = pos.length / 3;

@@ -20,7 +20,6 @@ import { T, X, addPieces, placeActuator } from './build';
 const _v = new Vector3();
 const _w = new Vector3();
 const _q = new Quaternion();
-const UP = new Vector3(0, 1, 0);
 
 export function buildLeg(rig: RobotRig, side: Side, scale: LimbScale) {
   const s = side === 'L' ? 1 : -1;
@@ -253,7 +252,6 @@ export function buildLeg(rig: RobotRig, side: Side, scale: LimbScale) {
   rig.anchor(`toe${side}`, foot, [0, -0.06, DIM.toe - 0.02]);
 
   // per-pose updates: knee crank and rod, ankle actuators aimed at the heel lugs
-  const kneeIdx = side === 'L' ? 'L_knee' : 'R_knee';
   const shinG = rig.seg.get(shin)!;
   const footG = rig.seg.get(foot)!;
   const rodTop = new Vector3(s * 0.025, -KNEE_DRIVE_Y, -KNEE_CRANK);
@@ -263,9 +261,8 @@ export function buildLeg(rig: RobotRig, side: Side, scale: LimbScale) {
     const angle = 2 * Math.atan2(q.x, q.w);
     crankTop.quaternion.setFromAxisAngle(X, angle);
     // rod: parallel to the thigh, its ends on both crank pins
-    _v.set(0, -Math.sin(angle) * 0 - 0, -KNEE_CRANK).applyAxisAngle(X, angle);
+    _v.set(0, 0, -KNEE_CRANK).applyAxisAngle(X, angle);
     rod.position.set(rodTop.x, -KNEE_DRIVE_Y + _v.y, _v.z);
-    void kneeIdx;
     // ankle actuators: in shin coordinates, point each body at its lug
     shinG.updateMatrixWorld(true);
     footG.updateMatrixWorld(true);
@@ -281,5 +278,4 @@ export function buildLeg(rig: RobotRig, side: Side, scale: LimbScale) {
       rods[i].scale.set(1, ext, 1);
     }
   });
-  void UP;
 }

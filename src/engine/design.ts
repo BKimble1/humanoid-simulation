@@ -111,7 +111,6 @@ export interface DesignReport {
   findings: Finding[];
 }
 
-const Y = new Vector3(0, 1, 0);
 
 function staticTask(model: RobotModel, kin: Kinematics, id: TaskId, pose: Pose, feet: ('L' | 'R')[], payloadPos: Vector3 | null, factor = 1): TaskResult {
   const md = new MotionDynamics(model);
@@ -446,4 +445,3 @@ function remediesFor(c: JointCheck, model: RobotModel, thermal = false): string[
   return r;
 }
 
-export { Y };

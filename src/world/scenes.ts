@@ -64,7 +64,7 @@ export const SCENES: Record<string, SceneDef> = {
     focus: [],
   },
   'explore.hands': {
-    shot: (w) => ({ id: 'hands', target: () => w.anchor('palmL').add(V(-0.02, 0.02, 0)), az: 0.95, el: 0.2, dist: 0.7, fov: 30, ox: 0.08, orbit: { el: [-0.1, 0.9], dist: [0.45, 1.6] } }),
+    shot: (w) => ({ id: 'hands', target: () => w.anchor('palmL').add(V(-0.02, -0.02, 0)), az: 0.32, el: 0.04, dist: 0.82, fov: 28, ox: 0.09, orbit: { el: [-0.1, 0.9], dist: [0.45, 1.6] } }),
     channels: { labels: 1, forces: 0.6 },
     pose: 'idle',
     idle: 'showHand',
@@ -134,18 +134,18 @@ export const SCENES: Record<string, SceneDef> = {
     pose: 'reach',
   },
   'sim.balance': {
-    shot: () => ({ id: 'balance', target: V(0, 0.86, 0.05), az: 0.9, el: 0.14, dist: 4.0, fov: 30, phone: { dist: 1.95, oy: -0.035 }, orbit: ORBIT }),
+    shot: () => ({ id: 'balance', target: V(0, 0.86, 0.05), az: 0.9, el: 0.14, dist: 4.0, fov: 30, subject: { w: 1.5, h: 1.95 }, orbit: ORBIT }),
     channels: { balanceViz: 1, forces: 1 },
     pose: 'balance',
   },
   'sim.walk': {
-    shot: (w) => ({ id: 'walk', target: () => w.walkTarget(), az: 1.3, el: 0.06, dist: 3.7, fov: 30, orbit: ORBIT }),
+    shot: (w) => ({ id: 'walk', target: () => w.walkTarget(), az: 1.3, el: 0.06, dist: 3.7, fov: 30, subject: { w: 1.3, h: 1.85 }, orbit: ORBIT }),
     channels: { balanceViz: 1, forces: 1 },
     pose: 'walk',
     gaze: 'ahead',
   },
   'sim.manipulation': {
-    shot: () => ({ id: 'manip', target: V(-0.12, 1.0, 0.3), az: -1.12, el: 0.2, dist: 2.1, fov: 30, ox: 0.1, orbit: ORBIT }),
+    shot: () => ({ id: 'manip', target: V(-0.12, 1.0, 0.3), az: -1.12, el: 0.2, dist: 2.1, fov: 30, ox: 0.1, subject: { w: 1.0, h: 0.95 }, orbit: ORBIT }),
     channels: { cart: 1, forces: 0.8 },
     pose: 'manip',
   },

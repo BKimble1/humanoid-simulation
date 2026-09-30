@@ -36,14 +36,21 @@ export class ActuatorLive implements Feature {
   /** Recent output torque (Nm) and motor current (A), one sample per frame. */
   hist = { tau: [] as number[], current: [] as number[], speed: [] as number[] };
 
+  /** Record the stride ahead of time (while loading: it is a few hundred gait ticks). */
+  prepare(model: RobotModel) {
+    if (this.cycle && this.modelRef === model) return;
+    this.cycle = recordStride(model);
+    this.modelRef = model;
+  }
+
   update(w: World, dt: number) {
     const on = w.ch.get('actuatorOut') + w.ch.get('explode');
-    this.active += ((on > 0.01 ? 1 : 0) - this.active) * Math.min(1, dt * 2);
-    if (on < 0.001 && this.active < 0.01) return;
-    if (!this.cycle || this.modelRef !== w.model) {
-      this.cycle = recordStride(w.model);
-      this.modelRef = w.model;
-    }
+    // the numbers run in the actuator views, closed or open; the rotor turns once it is out
+    const shown = w.sceneId === 'explore.actuators' || w.sceneId === 'explore.actuators.open';
+    this.active += ((on > 0.01 ? 1 : 0) - this.active) * (1 - Math.exp(-dt * 2));
+    if (!shown && on < 0.001 && this.active < 0.01) return;
+    this.prepare(w.model);
+    if (!this.cycle) return;
     const sel = useApp.getState().actuator;
     const j = JOINT[sel];
     const cfg = w.model.actuators[j]!;

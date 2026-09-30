@@ -159,6 +159,11 @@ export class Vision implements Feature {
     }
   }
 
+  /** Materials only the robot's view uses (for the warm-up: none may compile on first use). */
+  warmMaterials(): import('three').Material[] {
+    return [depthMat];
+  }
+
   /** Draw the robot's view into the reserved rectangle (after the main render). */
   renderInto(w: World) {
     const el = this.view;

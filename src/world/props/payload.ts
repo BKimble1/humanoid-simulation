@@ -9,11 +9,8 @@ import { material, markingTexture } from '../../scene/materials';
 import { LIFT_BOX } from '../sources/balance';
 import type { World } from '../world';
 
-function crate(label: string): { g: Group; mats: MeshPhysicalMaterial[] } {
-  const g = new Group();
-  const body = new MeshPhysicalMaterial({ color: '#3b4048', roughness: 0.62, metalness: 0, clearcoat: 0.1, transparent: true, opacity: 1 });
-  const trim = new MeshPhysicalMaterial({ color: '#a3a7ad', roughness: 0.38, metalness: 1, transparent: true, opacity: 1 });
-  const tex = markingTexture(
+function labelTexture(label: string) {
+  return markingTexture(
     [
       { text: label, size: 54, weight: 600, y: 48, x: 24 },
       { text: 'PAYLOAD', size: 26, weight: 500, tracking: 6, y: 100, x: 26, color: '#b7bbc4' },
@@ -21,27 +18,40 @@ function crate(label: string): { g: Group; mats: MeshPhysicalMaterial[] } {
     512,
     128,
   );
-  const lab = new MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.5, opacity: 1, depthWrite: false });
+}
+
+interface Crate {
+  g: Group;
+  mats: MeshPhysicalMaterial[];
+  /** The printed label's material (its texture changes with the mass). */
+  label: MeshPhysicalMaterial;
+}
+
+function crate(label: string): Crate {
+  const g = new Group();
+  const body = new MeshPhysicalMaterial({ color: '#3b4048', roughness: 0.62, metalness: 0, clearcoat: 0.1, transparent: true, opacity: 1 });
+  const trim = new MeshPhysicalMaterial({ color: '#a3a7ad', roughness: 0.38, metalness: 1, transparent: true, opacity: 1 });
+  const lab = new MeshPhysicalMaterial({ map: labelTexture(label), transparent: true, roughness: 0.5, opacity: 1, depthWrite: false });
   const bm = new Mesh(new RoundedBoxGeometry(1, 1, 1, 2, 0.02), body);
   bm.castShadow = true;
   bm.receiveShadow = true;
   g.add(bm);
   const t1 = new Mesh(new BoxGeometry(1.004, 0.06, 1.004), trim);
   t1.position.y = 0.44;
-  const t2 = t1.clone();
+  const t2 = new Mesh(t1.geometry, trim);
   t2.position.y = -0.44;
   g.add(t1, t2);
   const lb = new Mesh(new BoxGeometry(0.5, 0.2, 0.001), lab);
   lb.position.set(0, 0.1, 0.502);
   g.add(lb);
-  return { g, mats: [body, trim, lab] };
+  return { g, mats: [body, trim, lab], label: lab };
 }
 
 export class PayloadProp {
   root = new Group();
-  private carried: { g: Group; mats: MeshPhysicalMaterial[] };
-  private carriedLabel = '';
-  private liftBox: { g: Group; mats: MeshPhysicalMaterial[] };
+  private carried: Crate;
+  private carriedLabel = '10 kg';
+  private liftBox: Crate;
   private stand = new Group();
   private alpha = 0;
   private rise = 0;
@@ -67,13 +77,15 @@ export class PayloadProp {
     this.stand.visible = false;
   }
 
-  /** The carried crate shows its mass: a new crate when the mass changes. */
+  /** The carried crate shows its mass: its label is reprinted when the mass changes (the
+   * crate itself is kept; only the old label texture is released). */
   private label(text: string) {
     if (text === this.carriedLabel) return;
     this.carriedLabel = text;
-    this.root.remove(this.carried.g);
-    this.carried = crate(text);
-    this.root.add(this.carried.g);
+    const old = this.carried.label.map;
+    this.carried.label.map = labelTexture(text);
+    this.carried.label.needsUpdate = true;
+    old?.dispose();
   }
 
   update(w: World, dt: number) {

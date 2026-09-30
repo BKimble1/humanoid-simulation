@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react';
 import { useApp } from '../../state/store';
-import { TOUR, TOUR_LENGTH } from '../../world/tour';
+import { CAPTION_AT, TOUR, TOUR_LENGTH } from '../../world/tour';
 import type { World } from '../../world/world';
 
 const Icon = ({ d }: { d: string }) => (
@@ -36,13 +36,16 @@ export function WatchPlayer({ world }: { world: World }) {
   const c = TOUR[tour.index];
   if (!c) return null;
   const before = TOUR.slice(0, tour.index).reduce((s, x) => s + x.duration, 0);
+  // establish, then explain: the caption follows its subject onto the screen (and is there at
+  // once for a visitor who paused to read)
+  const captioned = tour.paused || tour.t >= (c.captionAt ?? CAPTION_AT);
   return (
     <div className="watchbar pe" role="region" aria-label="Guided tour">
       <div className="watchbar__text" key={c.id}>
         <p className="eyebrow">
           Tour · {String(tour.index + 1).padStart(2, '0')} / {TOUR.length} · {c.title}
         </p>
-        <p className="watchbar__caption" aria-live="polite">
+        <p className={`watchbar__caption ${captioned ? 'watchbar__caption--in' : ''}`} aria-live="polite">
           {keepUnits(c.caption)}
         </p>
       </div>

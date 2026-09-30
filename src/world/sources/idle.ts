@@ -7,7 +7,7 @@
  * at); each preset is a posture identity, so changing it blends like a change of source.
  * Everything goes through the COM-constrained posture solver, so the drawn COM is real.
  */
-import { Vector2, Vector3 } from 'three';
+import { Quaternion, Vector2, Vector3 } from 'three';
 import { DIM, type JointId, type Side } from '../../spec/body';
 import { solveArm } from '../../engine/ik';
 import type { RobotModel } from '../../engine/robot';
@@ -37,6 +37,10 @@ const REST_UPPER: Partial<Record<JointId, number>> = {
   waist_yaw: 0,
 };
 
+/** Left palm facing forward (+Z) with the fingers up: a half turn about (1, 0, −1)/√2 from the
+ * hand's rest frame. */
+const PALM_FORWARD = new Quaternion(Math.SQRT1_2, 0, -Math.SQRT1_2, 0);
+
 /** Presets for close inspection: the living motion is quietened. */
 const INSPECTION: Partial<Record<IdlePreset, number>> = { clearArms: 0.35, showHand: 0.45 };
 
@@ -62,7 +66,7 @@ export class IdleSource implements PoseSource {
   /** Amplitude of the living motion (0 frozen … 1 normal). */
   life = 1;
   /** Arm target for the showHand preset (world), set by the scene. */
-  handTarget = new Vector3(0.3, 1.3, 0.3);
+  handTarget = new Vector3(0.3, 1.38, 0.38);
   held: Held | null = null;
   private t = 0;
   private kin: Kinematics;
@@ -130,15 +134,16 @@ export class IdleSource implements PoseSource {
       upper.L_shoulder_pitch = 12;
       upper.R_shoulder_pitch = 12;
     } else if (this.preset === 'clearArms') {
-      // arms forward and out, hands clear of the hips and thighs (actuator views)
-      upper.L_shoulder_pitch = 24;
-      upper.R_shoulder_pitch = 24;
-      upper.L_shoulder_roll = 20;
-      upper.R_shoulder_roll = 20;
-      upper.L_elbow = 58;
-      upper.R_elbow = 58;
-      upper.L_arm_yaw = 10;
-      upper.R_arm_yaw = 10;
+      // arms a little back and out, hands behind the thighs: nothing between a camera at the
+      // front-left and the hip, knee and elbow actuators (actuator views)
+      upper.L_shoulder_pitch = -14;
+      upper.R_shoulder_pitch = -14;
+      upper.L_shoulder_roll = 17;
+      upper.R_shoulder_roll = 17;
+      upper.L_elbow = 34;
+      upper.R_elbow = 34;
+      upper.L_arm_yaw = -6;
+      upper.R_arm_yaw = -6;
     } else if (this.preset === 'armsOut') {
       upper.L_shoulder_roll = 38;
       upper.R_shoulder_roll = 38;
@@ -187,8 +192,8 @@ export class IdleSource implements PoseSource {
     // presented hand: the left arm reaches to a point in front of the chest, palm up; the
     // fingers close and open slowly, one after another
     if (this.preset === 'showHand' && !this.carrying) {
-      this.pose.setDeg({ L_wrist_yaw: -70 });
-      solveArm(this.pose, 'L', this.handTarget, this.kin, { iterations: 20 });
+      // the palm towards the viewer, fingers up: the fingers curl towards the camera
+      solveArm(this.pose, 'L', this.handTarget, this.kin, { iterations: 28, orientation: PALM_FORWARD });
       const hp = this.hands.L;
       const wave = (k: number) => 0.5 - 0.5 * Math.cos(Math.max(0, t - 1.2) * 0.9 - k * 0.4);
       hp.fingers = [0.1 + 0.55 * wave(0), 0.12 + 0.55 * wave(1), 0.14 + 0.55 * wave(2), 0.16 + 0.55 * wave(3)];

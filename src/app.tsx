@@ -11,6 +11,7 @@ import './styles/app.css';
 import { Header } from './ui/Header';
 import { Intro } from './ui/Intro';
 import { Panels } from './ui/Panels';
+import { Recenter } from './ui/Recenter';
 import type { World } from './world/world';
 
 function Stage({ onWorld }: { onWorld: (w: World) => void }) {
@@ -31,8 +32,8 @@ function Stage({ onWorld }: { onWorld: (w: World) => void }) {
       resize();
       ro = new ResizeObserver(resize);
       ro.observe(canvas);
-      await world.init((p) => set({ progress: p }));
-      if (disposed) return;
+      const ok = await world.init((p) => set({ progress: p }));
+      if (!ok || disposed) return;
       world.start();
       onWorld(world);
       set({ ready: true });
@@ -85,6 +86,7 @@ function App() {
         {ready && <Header />}
         {ready && mode === 'intro' && <Intro mass={world?.model.robotMass ?? 66} dof={BODY_DOF} />}
         {ready && world && <Panels world={world} />}
+        {ready && world && <Recenter world={world} />}
       </div>
       <Veil />
     </div>

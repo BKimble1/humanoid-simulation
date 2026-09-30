@@ -33,7 +33,10 @@ import { StanceKeeper, homeStance, newFeet } from '../stance';
 export type ManipTask = 'box' | 'vial' | 'tool' | 'cup' | 'wet' | 'shelf';
 export type Stage = 'rest' | 'reach' | 'approach' | 'close' | 'lift' | 'hold' | 'place' | 'release' | 'retract' | 'dropped';
 
-export const STAGE_DUR: Partial<Record<Stage, number>> = { reach: 1.5, approach: 0.8, close: 0.6, lift: 1.3, place: 1.5, release: 0.55, retract: 1.4, dropped: 1.2 };
+export const STAGE_DUR: Partial<Record<Stage, number>> = { reach: 1.5, approach: 0.8, close: 0.75, lift: 1.3, place: 1.5, release: 0.65, retract: 1.4, dropped: 1.2 };
+/** The fingers close in, and open in (s): about what a six-motor hand of this size manages. */
+const CLOSE_T = 0.6;
+const OPEN_T = 0.55;
 const quintic = (u: number) => {
   const x = Math.min(1, Math.max(0, u));
   return x * x * x * (x * (x * 6 - 15) + 10);
@@ -378,7 +381,7 @@ export class ManipSource implements PoseSource {
       this.palmQ[side].setFromRotationMatrix(this.kin.frames.get(`${side}_hand`)!);
     }
     // fingers: pre-shape while approaching, close to contact and grip, open on release
-    const closing = stage === 'close' ? quintic(this.st / 0.45) : stage === 'lift' || stage === 'hold' || stage === 'place' ? 1 : stage === 'release' ? 1 - quintic(this.st / 0.4) : 0;
+    const closing = stage === 'close' ? quintic(this.st / CLOSE_T) : stage === 'lift' || stage === 'hold' || stage === 'place' ? 1 : stage === 'release' ? 1 - quintic(this.st / OPEN_T) : 0;
     const pre = stage === 'reach' || stage === 'approach' ? (stage === 'reach' ? uu : 1) : stage === 'close' || stage === 'lift' || stage === 'hold' || stage === 'place' || stage === 'release' ? 1 : stage === 'retract' ? 1 - uu : 0;
     for (const side of ['L', 'R'] as Side[]) {
       const hp = relax(this.hands[side]);

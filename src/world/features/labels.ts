@@ -118,12 +118,36 @@ export class Labels implements Feature {
       if (l.def.value) l.value.textContent = l.def.value(w);
       else l.value.textContent = '';
     }
-    // push apart vertically, per side
+    // push apart: per side first, then any two boxes that still overlap (a left and a right
+    // callout can meet over the robot); a secondary callout that would end far from its anchor
+    // is left out rather than drawn with a long leader across the picture
     for (const side of [-1, 1]) {
       const col = placed.filter((l) => l.side === side).sort((a, b) => a.ty - b.ty);
       for (let i = 1; i < col.length; i++) if (col[i].ty < col[i - 1].ty + 36) col[i].ty = col[i - 1].ty + 36;
     }
-    for (const l of placed) {
+    const rect = (l: Live) => {
+      const w = 12 + 6.6 * Math.max(l.def.title.length, (l.value.textContent ?? '').length * 0.95);
+      const x0 = l.x + (l.def.dx ?? 64) * l.side + (l.side > 0 ? 6 : -6 - w);
+      return { x0, x1: x0 + w, y0: l.ty - 17, y1: l.ty + 17 };
+    };
+    const order = [...placed].sort((a, b) => (a.def.key === b.def.key ? a.ty - b.ty : a.def.key ? -1 : 1));
+    const done: { l: Live; r: ReturnType<typeof rect> }[] = [];
+    for (const l of order) {
+      let r = rect(l);
+      for (let k = 0; k < 8; k++) {
+        const hit = done.find((d) => r.x0 < d.r.x1 && r.x1 > d.r.x0 && r.y0 < d.r.y1 && r.y1 > d.r.y0);
+        if (!hit) break;
+        l.ty = hit.r.y1 + 19;
+        r = rect(l);
+      }
+      if (!l.def.key && Math.abs(l.ty - l.y) > 120) {
+        l.el.style.opacity = '0';
+        l.el.style.visibility = 'hidden';
+        continue;
+      }
+      done.push({ l, r });
+    }
+    for (const { l } of done) {
       const dx = (l.def.dx ?? 64) * l.side;
       const tx = l.x + dx;
       const ty = l.ty;

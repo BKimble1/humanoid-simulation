@@ -113,6 +113,7 @@ export class TourRunner {
     c.at?.forEach((a, k) => {
       if (!this.fired.has(k) && this.t >= a.t) {
         this.fired.add(k);
+        this.w.telemetry.mark('tour-action', `${c.id}#${k}`);
         a.run(this.w);
       }
     });

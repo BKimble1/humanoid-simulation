@@ -19,6 +19,21 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _r = new Vector3();
 const _m = new Matrix4();
+// scratch for the arm solver (it runs every frame: no allocation in its loop); m ≤ 6, n ≤ 8
+const _p = new Vector3();
+const _q = new Quaternion();
+const _cur = new Quaternion();
+const _inv = new Quaternion();
+const _err = new Float64Array(6);
+const _J = new Float64Array(6 * 8);
+const _JJt = new Float64Array(36);
+const _dq = new Float64Array(8);
+const _z = new Float64Array(8);
+const _Jz = new Float64Array(6);
+const _y = new Float64Array(6);
+const _w = new Float64Array(6);
+const _L = new Float64Array(36);
+const _t = new Float64Array(8);
 const _R = new Matrix3();
 
 export interface LegIKResult {
@@ -157,14 +172,14 @@ export function solveArm(pose: Pose, side: Side, target: Vector3, kin: Kinematic
   const wantRot = !!opts.orientation;
   const m = wantRot ? 6 : 3;
   const hand: SegmentId = `${side}_hand`;
-  const p = new Vector3();
-  const err = new Float64Array(m);
-  const J = new Float64Array(m * n);
+  const p = _p;
+  const err = _err;
+  const J = _J;
   let iter = 0;
   let posErr = 0;
   let angErr = 0;
-  const qTmp = new Quaternion();
-  const cur = new Quaternion();
+  const qTmp = _q;
+  const cur = _cur;
   for (; iter < iterations; iter++) {
     kin.update(pose);
     kin.point(hand, PALM_POINT, p);
@@ -174,7 +189,7 @@ export function solveArm(pose: Pose, side: Side, target: Vector3, kin: Kinematic
     posErr = Math.hypot(err[0], err[1], err[2]);
     if (wantRot) {
       cur.setFromRotationMatrix(kin.frames.get(hand)!);
-      qTmp.copy(opts.orientation!).multiply(cur.clone().invert());
+      qTmp.copy(opts.orientation!).multiply(_inv.copy(cur).invert());
       if (qTmp.w < 0) qTmp.set(-qTmp.x, -qTmp.y, -qTmp.z, -qTmp.w);
       const ang = 2 * Math.acos(Math.min(1, qTmp.w));
       const sn = Math.sqrt(Math.max(1e-12, 1 - qTmp.w * qTmp.w));
@@ -201,30 +216,30 @@ export function solveArm(pose: Pose, side: Side, target: Vector3, kin: Kinematic
       }
     }
     // Δq = Jᵀ (J Jᵀ + λ² I)⁻¹ e  +  (I − J⁺J) k (q_rest − q)
-    const JJt = new Float64Array(m * m);
+    const JJt = _JJt;
     for (let i = 0; i < m; i++)
       for (let j = 0; j < m; j++) {
         let sum = 0;
         for (let c = 0; c < n; c++) sum += J[i * n + c] * J[j * n + c];
         JJt[i * m + j] = sum + (i === j ? lambda * lambda : 0);
       }
-    const y = solveSym(JJt, err, m);
-    const dq = new Float64Array(n);
+    const y = solveSym(JJt, err, m, _y);
+    const dq = _dq;
     for (let c = 0; c < n; c++) {
       let sum = 0;
       for (let i = 0; i < m; i++) sum += J[i * n + c] * y[i];
       dq[c] = sum;
     }
     // posture in the null space (approximate projector with the damped pseudo-inverse)
-    const z = new Float64Array(n);
+    const z = _z;
     for (let c = 0; c < n; c++) z[c] = 0.08 * (rest[c] * DEG - pose.q[idx[c]]);
-    const Jz = new Float64Array(m);
+    const Jz = _Jz;
     for (let i = 0; i < m; i++) {
       let sum = 0;
       for (let c = 0; c < n; c++) sum += J[i * n + c] * z[c];
       Jz[i] = sum;
     }
-    const w = solveSym(JJt, Jz, m);
+    const w = solveSym(JJt, Jz, m, _w);
     for (let c = 0; c < n; c++) {
       let sum = 0;
       for (let i = 0; i < m; i++) sum += J[i * n + c] * w[i];
@@ -250,9 +265,11 @@ export function solveArm(pose: Pose, side: Side, target: Vector3, kin: Kinematic
   return { error: posErr, angleError: angErr, reached: posErr < 0.01, iterations: iter, atLimit };
 }
 
-/** Solve a small symmetric positive-definite system by Cholesky. */
-export function solveSym(A: Float64Array, b: Float64Array, n: number): Float64Array {
-  const L = new Float64Array(n * n);
+/** Solve a small symmetric positive-definite system by Cholesky (into `out`, if given; n ≤ 6
+ * uses shared scratch, so the result must be used before the next call). */
+export function solveSym(A: Float64Array, b: Float64Array, n: number, out?: Float64Array): Float64Array {
+  const small = n <= 6;
+  const L = small ? _L.fill(0, 0, n * n) : new Float64Array(n * n);
   for (let i = 0; i < n; i++)
     for (let j = 0; j <= i; j++) {
       let sum = A[i * n + j];
@@ -260,13 +277,13 @@ export function solveSym(A: Float64Array, b: Float64Array, n: number): Float64Ar
       if (i === j) L[i * n + i] = Math.sqrt(Math.max(sum, 1e-12));
       else L[i * n + j] = sum / L[j * n + j];
     }
-  const y = new Float64Array(n);
+  const y = small ? _t : new Float64Array(n);
   for (let i = 0; i < n; i++) {
     let sum = b[i];
     for (let k = 0; k < i; k++) sum -= L[i * n + k] * y[k];
     y[i] = sum / L[i * n + i];
   }
-  const x = new Float64Array(n);
+  const x = out ?? new Float64Array(n);
   for (let i = n - 1; i >= 0; i--) {
     let sum = y[i];
     for (let k = i + 1; k < n; k++) sum -= L[k * n + i] * x[k];

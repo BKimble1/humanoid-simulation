@@ -43,7 +43,8 @@ assumptions, limitations and sources.
   7. *Failures and limits*: excess payload, overheating, low battery, torque saturation, excess
      current, loss of balance, unreachable target, insufficient grip — each with its numbers,
      cause and remedies.
-- **Watch** — a 3 min 20 s guided tour on the app's own clock; pause, skip, leave at any time.
+- **Watch** — a 3 min 20 s captioned guided tour (no narration) on the app's own clock; pause
+  holds the whole demonstration, and skipping, going back or leaving works at any moment.
 - **Technical information** (the ⓘ) — what is calculated, estimated and approximated, the
   models, their limits and the sources.
 
@@ -62,8 +63,24 @@ npm run e2e          # browser tests (Playwright, SwiftShader): desktop, laptop,
 Address options: `?mode=explore&system=power`, `?mode=simulate&lab=walk`, `?mode=engineer`
 open a place directly; `?quality=low|medium|high` forces a rendering tier. For tests and
 recording, `?virt=1` steps time frame by frame (`window.__fabAdvance(n, render)`) and exposes the
-world and stores (`window.__fab`, `window.__fabStores`); `?capture=1` keeps the drawing buffer.
-`scripts/shots.mjs` takes frame-stepped screenshots from a list of steps.
+world and stores (`window.__fab`, `window.__fabStores`); `?hooks=1` exposes them in real time;
+`?capture=1` keeps the drawing buffer. With the hooks, `window.__fabTelemetry.start()` records
+developer telemetry every frame (joint, hand, pelvis, camera and object motion, sole slip,
+camera clearance; `src/world/telemetry.ts`), `window.__fabState()` returns everything presented
+as numbers, and `window.__fabPerf()` the real frame intervals and GPU resource counts.
+
+| script | what it does |
+|---|---|
+| `scripts/shots.mjs` | frame-stepped screenshots from a list of steps |
+| `node scripts/probe.mjs <scenario> [--video]` | runs a scenario from `scripts/scenarios.mjs` with telemetry on, writes every frame's measurements and a summary (and a clip with `--video`) |
+| `node scripts/perf.mjs [--tour 60] [--soak 600]` | real-time measurements on the page's own frame loop: cold loads, first visits of each scene, the tour, and a soak with GPU and heap counts |
+
+The motion and presentation tests: `e2e/continuity.spec.ts` (every frame of scene changes,
+actuator switches, pick and place, walking and hand-overs, rapid changes, energy at different
+frame rates), `e2e/watch.spec.ts` (pause in frame-stepped and real time, chapter baselines,
+navigation, leaving) and `e2e/camera.spec.ts` (orbit, fling, cancel, pinch, IK drag, Recenter,
+framing that follows the layout). What they found in V1 is in `docs/V2-BASELINE.md`; how the
+motion is kept continuous is in `docs/ENGINEERING.md`, section 9.
 
 ## How it is built
 

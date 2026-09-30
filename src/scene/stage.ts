@@ -21,8 +21,8 @@ import {
   type Texture,
 } from 'three';
 import { buildEnvironment } from './env';
-import { FrameMonitor, TIERS, initialTier, useQuality, type Tier } from './quality';
-import { CAPTURE } from './time';
+import { FrameMonitor, FrameStats, TIERS, initialTier, useQuality, type Tier } from './quality';
+import { CAPTURE, time } from './time';
 
 export class Stage {
   renderer: WebGLRenderer;
@@ -33,6 +33,8 @@ export class Stage {
   private ao: N8AOPostPass | null = null;
   private tier: Tier;
   private monitor = new FrameMonitor();
+  /** Real frame intervals (developer statistics). */
+  frames = new FrameStats();
   width = 1;
   height = 1;
   canvas: HTMLCanvasElement;
@@ -101,7 +103,7 @@ export class Stage {
         ao.configuration.halfRes = true;
         ao.configuration.depthAwareUpsampling = true;
         ao.configuration.gammaCorrection = false;
-        ao.setQualityMode('Medium');
+        ao.setQualityMode(spec.aoQuality);
         composer.addPass(ao);
         this.ao = ao;
       }
@@ -131,7 +133,9 @@ export class Stage {
   }
 
   render(dt: number) {
-    this.monitor.update(dt);
+    // the quality monitor and the statistics read the real interval, not the clamped step
+    this.monitor.update(time.raw);
+    if (!time.virtual) this.frames.push(time.raw);
     this.renderer.info.reset();
     if (this.composer) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
@@ -153,6 +157,8 @@ export class Stage {
   dispose() {
     this.unsub();
     this.composer?.dispose();
+    this.env.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
   }
 }

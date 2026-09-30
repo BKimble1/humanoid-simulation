@@ -1,0 +1,13 @@
+clip-hands: 330 frames, 412 s, errors 0
+  joint speed max rad/s   51.902@46(explore.hands) 29.604@141(explore.actuators) 17.802@236(explore.forces)
+  joint accel max rad/s²  1557.589@47(explore.hands) 1557.308@46(explore.hands) 888.117@142(explore.actuators)
+  hand rate max 1/s       14.827@46(explore.hands) 8.199@141(explore.actuators) 0.247@116(explore.hands)
+  pelvis speed max m/s    0.721@141(explore.actuators) 0.649@236(explore.forces) 0.026@55(explore.hands)
+  camera speed max m/s    2.514@74(explore.hands) 2.513@75(explore.hands) 2.504@73(explore.hands)
+  camera accel max m/s²   4.130@59(explore.hands) 4.115@58(explore.hands) 4.095@60(explore.hands)
+  camera clearance min m  0.512@158(explore.actuators) 0.512@159(explore.actuators) 0.512@157(explore.actuators)
+  sole slip max m/s       0.000@281(explore.forces) 0.000@9(explore.overview) 0.000@50(explore.hands)
+  sole min m              -0.000@312(explore.forces) -0.000@67(explore.hands) -0.000@306(explore.forces)
+  object speed max m/s    0.000@1(explore.overview) 0.000@2(explore.overview) 0.000@3(explore.overview)
+  attach err max m        -1.000@1(explore.overview) -1.000@2(explore.overview) -1.000@3(explore.overview)
+  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-hands.mp4

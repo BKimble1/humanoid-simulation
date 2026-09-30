@@ -50,9 +50,12 @@ export interface Shot {
   /** Lens shift (see CamState). */
   ox?: number;
   oy?: number;
-  /** On a phone held upright, when the default framing crops the subject: distance factor and
-   * extra vertical lens shift. */
-  phone?: { dist?: number; oy?: number };
+  /** What the shot is about, as a box around its target (m): width across the view, height.
+   * The camera keeps it inside the part of the view the interface leaves free (default: from
+   * the shot's distance, as it was composed on a desktop screen). */
+  subject?: { w: number; h: number };
+  /** On a phone held upright: an extra vertical lens shift, for a composition that needs it. */
+  phone?: { oy?: number };
   /** Transition time, s (default from how far the camera travels). */
   duration?: number;
   /** Slow orbit while holding, rad/s, and a gentle elevation sway amplitude, rad. */
@@ -161,6 +164,9 @@ export class Director {
   viewW = 1280;
   viewH = 800;
   compact = false;
+  /** The part of the view the interface leaves free (fractions: left, top, right, bottom),
+   * measured from the page's header and panels. Shots keep their subject inside it. */
+  free = { l: 0, t: 0, r: 1, b: 1 };
   /** The followed target, filtered (a shot's anchor, without the robot's millimetre sway). */
   private follow = new Vector3();
   private followV = new Vector3();
@@ -170,25 +176,67 @@ export class Director {
     this.camera = camera;
   }
 
-  /** The shot's horizontal lens shift for the current layout. */
-  private lensX(s: Shot): number {
-    return this.compact ? 0 : (s.ox ?? 0);
+  /** The shot's subject box (m): given, or what its composed distance frames on a desktop. */
+  private subjectOf(s: Shot): { w: number; h: number } {
+    if (s.subject) return s.subject;
+    const span = 2 * s.dist * Math.tan(((s.fov ?? 30) * Math.PI) / 360);
+    // wide shots are composed around a standing figure (aimed near its waist, above its middle:
+    // the box reaches the floor), close-ups leave room around the part
+    const h = span * (s.dist > 2.2 ? 0.86 : 0.6);
+    return { w: h * 0.5, h };
   }
 
-  /** Vertical lens shift: on phones the panel is a bottom sheet, so the subject sits higher. */
-  private lensY(s: Shot): number {
-    if (!this.compact) return s.oy ?? 0;
-    return this.viewH > this.viewW ? (s.oy ?? 0) - 0.12 + (s.phone?.oy ?? 0) : (s.oy ?? 0) - 0.05;
+  /**
+   * The distance that fits the subject in the free part of the view (margins included). On a
+   * desktop the composed distance stands when the subject fits; on a phone the fit decides.
+   */
+  private fitDist(s: Shot): number {
+    const sub = this.subjectOf(s);
+    const f = this.free;
+    const tan = Math.tan(((s.fov ?? 30) * Math.PI) / 360);
+    const fh = Math.max(0.2, f.b - f.t) * 0.9;
+    const fw = Math.max(0.2, f.r - f.l) * 0.92;
+    const aspect = this.viewW / Math.max(1, this.viewH);
+    return Math.max(sub.h / (2 * tan * fh), sub.w / (2 * tan * aspect * fw));
   }
 
   private distOf(s: Shot): number {
-    let d = s.dist;
-    if (this.compact) {
-      // portrait: the whole subject has to fit above the sheet
-      const portrait = this.viewH > this.viewW;
-      d *= portrait ? (s.phone?.dist ?? (s.dist > 2.2 ? 1.72 : 1.35)) : 1.12;
-    }
+    const d = this.compact ? this.fitDist(s) : Math.max(s.dist, this.fitDist(s));
     return d * this.endScale;
+  }
+
+  /** Half the subject's size on screen, as fractions of the view (at the shot's distance). */
+  private halfSize(s: Shot): { x: number; y: number } {
+    const sub = this.subjectOf(s);
+    const span = 2 * this.distOf(s) * Math.tan(((s.fov ?? 30) * Math.PI) / 360);
+    return { x: sub.w / (2 * span * (this.viewW / Math.max(1, this.viewH))), y: sub.h / (2 * span) };
+  }
+
+  /**
+   * The shot's horizontal lens shift for the current layout: as composed (none on phones),
+   * moved only as far as needed to keep the subject in the free part of the view. The subject
+   * appears at 0.5 − ox across the view.
+   */
+  private lensX(s: Shot): number {
+    const f = this.free;
+    const half = this.halfSize(s).x;
+    const want = 0.5 - (this.compact ? 0 : (s.ox ?? 0));
+    const lo = f.l + 0.02 + half;
+    const hi = f.r - 0.02 - half;
+    const x = lo <= hi ? MathUtils.clamp(want, lo, hi) : (f.l + f.r) / 2;
+    return 0.5 - x;
+  }
+
+  /** Vertical lens shift, likewise: the subject appears at 0.5 + oy down the view. On phones it
+   * is centred in the room above the sheet. */
+  private lensY(s: Shot): number {
+    const f = this.free;
+    const half = this.halfSize(s).y;
+    const want = this.compact ? (f.t + f.b) / 2 + (this.viewH > this.viewW ? (s.phone?.oy ?? 0) : 0) : 0.5 + (s.oy ?? 0);
+    const lo = f.t + 0.02 + half;
+    const hi = f.b - 0.02 - half;
+    const y = lo <= hi ? MathUtils.clamp(want, lo, hi) : (f.t + f.b) / 2;
+    return y - 0.5;
   }
 
   private targetOf(s: Shot): Vector3 {
@@ -506,7 +554,8 @@ export class Director {
 
   attach(el: HTMLElement): () => void {
     const down = (e: PointerEvent) => {
-      if (!this.canOrbit() || this.claimed.has(e.pointerId)) return;
+      // while something else owns a pointer (the IK target is being dragged) the camera stays put
+      if (!this.canOrbit() || this.claimed.size > 0) return;
       if (e.button !== 0 && e.pointerType === 'mouse') return;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try {
@@ -590,12 +639,24 @@ export class Director {
     return Math.abs(this.user.az) > 0.05 || Math.abs(this.user.el) > 0.05 || Math.abs(this.user.zoom - 1) > 0.05;
   }
 
-  /** Return to the directed framing (smoothly, from the picture shown). */
+  /** Return to the directed framing (smoothly, from the picture shown; the move's length
+   * comes from how far the visitor took the camera). */
   recenter() {
     if (this.shot) {
       const s = this.shot;
       this.shot = null;
-      this.go(s, { duration: 1.1 });
+      this.go(s);
+    }
+  }
+
+  /** The layout's free area is known (first measured, or changed while nothing is on screen):
+   * a holding shot takes its framing at once instead of easing into it. */
+  snapFraming() {
+    if (this.shot && !this.moving) {
+      this.cur.dist = this.distOf(this.shot);
+      this.cur.ox = this.lensX(this.shot);
+      this.cur.oy = this.lensY(this.shot);
+      this.apply(this.effective());
     }
   }
 }

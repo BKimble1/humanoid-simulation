@@ -86,7 +86,7 @@ export class BalanceSource implements PoseSource {
   private stand: number;
   private stance = { L: new Vector2(DIM.hipHalfWidth, 0), R: new Vector2(-DIM.hipHalfWidth, 0) };
   private arrowT = 0;
-  private ret: { side: Side; from: Vector2; to: Vector2; t: number; stage: 0 | 1 | 2; com0: Vector2 }[] = [];
+  private ret: { side: Side; from: Vector2; to: Vector2; t: number; stage: 0 | 1 | 2; com0: Vector2; dur: number }[] = [];
   private failT = 0;
   private restore: { from: Pose; t: number } | null = null;
   private minMargin = 0;
@@ -387,9 +387,15 @@ export class BalanceSource implements PoseSource {
       L_elbow: 18,
       R_elbow: 18,
     };
-    solvePosture(model, this.kin, this.pose, { com: s.c.clone(), pelvisHeight: this.stand - (s.strategy === 'step' ? 0.02 : 0), pelvisPitch: pitch, pelvisRoll: roll, feet: this.feet, upper, iterations: 3 });
+    // the pelvis dips a little while stepping, and rises back smoothly
+    this.dip += ((s.strategy === 'step' ? 0.02 : 0) - this.dip) * (1 - Math.exp(-dt * 6));
+    solvePosture(model, this.kin, this.pose, { com: s.c.clone(), pelvisHeight: this.stand - this.dip, pelvisPitch: pitch, pelvisRoll: roll, feet: this.feet, upper, iterations: 3 });
     this.comX.x = s.c.x;
     this.comZ.x = s.c.y;
+    this.h.x = this.stand - this.dip;
+    this.h.v = 0;
+    this.pitch.x = pitch;
+    this.pitch.v = 0;
     // done: settled standing
     if (s.strategy === 'stand' && s.t > 0.6 && s.push.lengthSq() === 0) {
       this.outcome = { strategies: [...s.used], steps: s.steps, failed: null, peakMargin: this.minMargin };
@@ -402,13 +408,15 @@ export class BalanceSource implements PoseSource {
   }
 
   private lastPush = new Vector2();
+  /** How far the pelvis dips during a recovery step, m (smoothed). */
+  private dip = 0;
 
   /** Walk displaced feet back to the stance: COM over the other foot, step, COM back. */
   private beginReturn() {
     this.ret = [];
     const home = { L: new Vector2(DIM.hipHalfWidth, 0), R: new Vector2(-DIM.hipHalfWidth, 0) };
     for (const side of ['L', 'R'] as Side[]) {
-      if (this.stance[side].distanceTo(home[side]) > 0.02) this.ret.push({ side, from: this.stance[side].clone(), to: home[side], t: 0, stage: 0, com0: new Vector2(this.comX.x, this.comZ.x) });
+      if (this.stance[side].distanceTo(home[side]) > 0.02) this.ret.push({ side, from: this.stance[side].clone(), to: home[side], t: 0, stage: 0, com0: new Vector2(this.comX.x, this.comZ.x), dur: 1 });
     }
     this.phase = this.ret.length ? 'return' : 'task';
   }
@@ -425,8 +433,13 @@ export class BalanceSource implements PoseSource {
     const o = this.stance[other];
     const overOther = new Vector2(o.x + (r.side === 'L' ? -0.012 : 0.012), o.y + 0.035);
     const mid = this.stance.L.clone().add(this.stance.R).multiplyScalar(0.5).add(new Vector2(0, 0.035));
-    const dur = [0.8, 0.75, 0.7][r.stage];
-    r.t += dt / dur;
+    // each stage takes the time its distance needs (weight shifts peak near 0.26 m/s)
+    if (r.t === 0) {
+      const back = this.ret.length > 1 ? mid : new Vector2(0, 0.035);
+      const d = r.stage === 0 ? r.com0.distanceTo(overOther) : r.stage === 1 ? r.from.distanceTo(r.to) : overOther.distanceTo(back);
+      r.dur = Math.max([0.7, 0.6, 0.7][r.stage], (1.875 * d) / (r.stage === 1 ? 0.6 : 0.26));
+    }
+    r.t += dt / r.dur;
     const u = quintic(r.t);
     let com: Vector2;
     let lift = 0;
@@ -453,6 +466,11 @@ export class BalanceSource implements PoseSource {
     this.comX.x = com.x;
     this.comZ.x = com.y;
     this.comX.v = this.comZ.v = 0;
+    // the task's springs pick up exactly where the steps leave the posture
+    this.h.x = this.stand;
+    this.h.v = 0;
+    this.pitch.x = 1.5 * DEG;
+    this.pitch.v = 0;
     this.aimHead(-0.1);
   }
 

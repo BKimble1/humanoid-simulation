@@ -94,7 +94,7 @@ export function ManipLab({ world }: { world: World }) {
         <Readout label="Minimum to hold" value={n(r.mRequired, 1)} unit="N" />
         <Readout label="Load" value={n(r.mLoad, 1)} unit="N" />
         <Readout label="Friction estimate" value={n(r.mMuHat, 2)} kind="estimate" />
-        <Readout label="Slip" value={n(r.mSlip, 1)} unit="mm" tone={Number(r.mSlip) > 1 ? 'warn' : undefined} />
+        <Readout label={`Slip · drawn ×${n(r.mSlipShown)}`} value={n(r.mSlip, 1)} unit="mm" tone={Number(r.mSlip) > 1 ? 'warn' : undefined} />
         <Readout label="Detections" value={n(r.mDetections)} />
       </div>
       <Plot title="Grip" series={force} unit="N" height={64} min={0} />
@@ -102,6 +102,7 @@ export function ManipLab({ world }: { world: World }) {
       <ul className="notes">
         <li>Friction holds the object: m·(g + a) ≤ 2·μ·N at the two contacts. The controller aims for {GRIP.safety}× that, less for fragile objects, and never above what would break them.</li>
         <li>Before the object slides, the edge of each contact slips first and vibrates (50–400 Hz): the skins detect it, the controller re-estimates μ and tightens — in tens of milliseconds.</li>
+        <li>Slip is millimetres: in the scene, the object's slide in the hand is drawn {n(r.mSlipShown)} times larger so it can be seen (visual approximation).</li>
       </ul>
     </div>
   );

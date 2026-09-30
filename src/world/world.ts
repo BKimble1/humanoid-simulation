@@ -50,7 +50,7 @@ import { publishReadouts } from './readouts';
 import { Telemetry } from './telemetry';
 import { RobotProxies } from './proxies';
 import { handToArray, HAND_N } from './handPose';
-import { Mesh, Group, Matrix4, Quaternion, type Object3D } from 'three';
+import { AgXToneMapping, BoxGeometry, Mesh, Group, Matrix4, Quaternion, type Object3D } from 'three';
 
 export interface Feature {
   update(w: World, dt: number): void;
@@ -64,6 +64,8 @@ interface Cover {
   rm: RobotMesh;
   ghost: Mesh;
   g: number;
+  /** Centre of the mesh's bounds in its own frame (for fading by distance from a subject). */
+  centre: Vector3;
 }
 
 export class World {
@@ -162,19 +164,25 @@ export class World {
     // reduced motion: camera moves become short cross-moves
     const rm = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     this.director.reducedMotion = !!rm?.matches;
-    rm?.addEventListener?.('change', (e) => (this.director.reducedMotion = e.matches));
+    const onRM = (e: MediaQueryListEvent) => this.setReducedMotion(e.matches);
+    rm?.addEventListener?.('change', onRM);
+    this.unsub.push(() => rm?.removeEventListener?.('change', onRM));
+    this.setReducedMotion(!!rm?.matches);
     this.unsub.push(this.director.attach(canvas));
     this.stage.onResize = (w, h) => {
       this.director.viewW = w;
       this.director.viewH = h;
       this.director.compact = w < 760;
+      this.measureFree();
     };
   }
 
-  /** Build the robot and prepare the GPU; `progress` reports 0 … 1. */
-  async init(progress: (p: number) => void) {
+  /** Build the robot and prepare the GPU; `progress` reports 0 … 1. Returns false if the world
+   * was disposed while it was being prepared (nothing is left subscribed then). */
+  async init(progress: (p: number) => void): Promise<boolean> {
     progress(0.1);
     await frame();
+    if (this.disposed) return false;
     const cfg = useApp.getState().config;
     this.rig = buildRobot({ scale: cfg.scale, parallel: cfg.pack.parallel });
     this.stage.scene.add(this.rig.root);
@@ -183,6 +191,7 @@ export class World {
     this.features.unshift(this.openings);
     progress(0.45);
     await frame();
+    if (this.disposed) return false;
     // first pose, first camera
     const p = restPose();
     p.pelvisPos.set(0, 0.89, 0);
@@ -195,10 +204,15 @@ export class World {
     this.applyScene(this.sceneFor(useApp.getState()), true);
     progress(0.6);
     await frame();
+    if (this.disposed) return false;
     this.buildAssemblies();
     progress(0.75);
     await frame();
+    if (this.disposed) return false;
+    this.warmVariants();
+    this.actuatorLive.prepare(this.model);
     await this.stage.prewarm();
+    if (this.disposed) return false;
     progress(1);
     // follow the app store
     this.unsub.push(useApp.subscribe((s, prev) => this.onStore(s, prev)));
@@ -213,6 +227,19 @@ export class World {
       w.__fabAdvance = (n = 1, render = true) => {
         for (let i = 0; i < n; i++) this.step(tickVirtual(), render || i === n - 1);
       };
+      // the virtual frame's length (s): tests run at 30, 60, 120 Hz or irregular steps
+      w.__fabSetStep = (dt: number) => {
+        time.step = dt;
+      };
+      // frames of the given lengths (s), none drawn: equal simulated time at any rate
+      w.__fabSteps = (steps: number[]) => {
+        for (const d of steps) {
+          time.step = d;
+          this.step(tickVirtual(), false);
+        }
+      };
+      // everything the demonstration presents, as numbers (pause and determinism tests)
+      w.__fabState = () => this.presentedState();
       w.__fabTime = () => {
         const t0 = performance.now();
         this.step(tickVirtual(), false);
@@ -220,7 +247,22 @@ export class World {
         this.stage.render(1 / 30);
         return { logic: t1 - t0, render: performance.now() - t1 };
       };
+      // real frame intervals and GPU resources (performance reports, soak tests)
+      w.__fabPerf = () => ({ frames: this.stage.frames.summary(), memory: { ...this.stage.renderer.info.memory }, programs: this.stage.renderer.info.programs?.length ?? 0, calls: this.stage.stats.calls, triangles: this.stage.stats.triangles, tier: this.stage.currentTier });
+      w.__fabPerfReset = () => this.stage.frames.reset();
+      this.unsub.push(() => {
+        for (const k of ['__fab', '__fabStores', '__fabTelemetry', '__fabAdvance', '__fabSetStep', '__fabSteps', '__fabState', '__fabTime', '__fabPerf', '__fabPerfReset']) if (w[k] && (k !== '__fab' || w[k] === this)) delete w[k];
+      });
     }
+    return true;
+  }
+
+  private disposed = false;
+
+  /** Reduced motion: camera moves, scene channels and blends all become short. */
+  setReducedMotion(on: boolean) {
+    this.director.reducedMotion = on;
+    this.ch.speed = on ? 0.35 : 1;
   }
 
   start() {
@@ -382,6 +424,46 @@ export class World {
     return RIG_PIVOT.clone().add(new Vector3(0.05, -0.1, 0.14));
   }
 
+  /**
+   * Compile every material variant a visit can reveal, while loading: `compile` only walks
+   * what is visible, so the x-ray fades and ghosts, the opened assemblies, parked props, the
+   * vision view's tone mapping and depth material would otherwise compile on first use, in
+   * the middle of a transition.
+   */
+  private warmVariants() {
+    const r = this.stage.renderer;
+    const scene = this.stage.scene;
+    const cam = this.stage.camera;
+    const shown: Object3D[] = [];
+    scene.traverse((o) => {
+      if (!o.visible) {
+        o.visible = true;
+        shown.push(o);
+      }
+    });
+    const tone = r.toneMapping;
+    const probe = new Mesh(new BoxGeometry(0.01, 0.01, 0.01));
+    probe.position.set(0, -5, 0);
+    scene.add(probe);
+    try {
+      r.compile(scene, cam);
+      for (const c of this.covers) c.rm.mesh.material = c.rm.fade;
+      r.compile(scene, cam);
+      r.toneMapping = AgXToneMapping;
+      r.compile(scene, cam);
+      for (const m of this.vision.warmMaterials()) {
+        probe.material = m;
+        r.compile(scene, cam);
+      }
+    } finally {
+      r.toneMapping = tone;
+      for (const c of this.covers) c.rm.mesh.material = c.rm.solid;
+      for (const o of shown) o.visible = false;
+      scene.remove(probe);
+      probe.geometry.dispose();
+    }
+  }
+
   // ─────────────────────────── covers, isolation, highlight ───────────────────────────
 
   /** Markings on covers, by the cover mesh's name: they fade with it. */
@@ -397,7 +479,8 @@ export class World {
       ghost.renderOrder = 5;
       ghost.name = rm.mesh.name + ':ghost';
       rm.mesh.parent!.add(ghost);
-      return { rm, ghost, g: 0 };
+      rm.mesh.geometry.computeBoundingSphere();
+      return { rm, ghost, g: 0, centre: rm.mesh.geometry.boundingSphere!.center.clone() };
     });
   }
 
@@ -409,9 +492,18 @@ export class World {
     const x = this.ch.get('xray');
     const iso = this.ch.get('isolate');
     const focus = this.scene.focus;
-    // an opened actuator is the subject: the robot around it recedes to a faint outline
-    const ghostK = 1 - 0.72 * this.ch.get('explode');
+    // an opened actuator is the subject: the robot around it recedes to a faint outline, and
+    // everything away from the actuator's limb fades out altogether (stacked ghosts of the
+    // torso and the other limbs would only be clutter behind the parts)
+    const ex = this.ch.get('explode');
+    const subject = ex > 0.001 ? this.assemblyCentre() : null;
     for (const c of this.covers) {
+      let ghostK = 1 - 0.72 * ex;
+      if (subject) {
+        const d = _cw.copy(c.centre).applyMatrix4(c.rm.mesh.matrixWorld).distanceTo(subject);
+        const near = 1 - smoothstep(0.22, 0.55, d);
+        ghostK = 1 - ex * (0.72 + 0.26 * (1 - near));
+      }
       const rm = c.rm;
       // the opened actuator's exterior is replaced by its assembly
       const hidden = this.assemblyHides(rm);
@@ -572,6 +664,8 @@ export class World {
     this.rig.root.updateMatrixWorld(true);
     this.lab.moveBelt(this.walk.beltNow - this.lab.beltOffset);
     this.applyCovers();
+    // the actuator's duty cycle steps before the assemblies read its rotor (no frame of lag)
+    this.actuatorLive.update(this, pdt);
     this.updateAssemblies(pdt);
     this.limits.update();
     // objects disturbed in the manipulation lab go back while the cart is away
@@ -582,11 +676,14 @@ export class World {
     const src = this.driver.source;
     this.overlays.push = src === this.balance ? this.balance.pushArrow : null;
     this.overlays.extra = src === this.manip ? this.manip.forces : [];
-    for (const f of this.features) f.update(this, pdt);
+    for (const f of this.features) if (f !== this.actuatorLive) f.update(this, pdt);
     for (const cb of this.onFrame) cb(this, pdt);
     if (time.now - this.readoutsAt > 0.1) {
       this.readoutsAt = time.now;
       publishReadouts(this);
+      this.measureFree();
+      const off = this.director.offFraming && this.director.canOrbit();
+      if (off !== useApp.getState().offFraming) useApp.setState({ offFraming: off });
     }
     this.tour.update(pdt, dt);
     this.kin.update(this.driver.out);
@@ -604,6 +701,41 @@ export class World {
   }
 
   /**
+   * The part of the view the interface leaves free, for the camera's framing: measured from the
+   * page (the header, and whichever side panel, phone sheet or caption bar is showing), so a
+   * collapsed sheet or a turned phone reframes the subject without per-device rules.
+   */
+  private measureFree() {
+    if (typeof document === 'undefined') return;
+    const c = this.stage.canvas.getBoundingClientRect();
+    if (c.width < 2 || c.height < 2) return;
+    const f = { l: 0, t: 0, r: 1, b: 1 };
+    for (const el of document.querySelectorAll<HTMLElement>('.ui header.top, .ui aside.side, .ui .watchbar')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const l = (r.left - c.left) / c.width;
+      const rt = (r.right - c.left) / c.width;
+      const t = (r.top - c.top) / c.height;
+      const b = (r.bottom - c.top) / c.height;
+      if (b - t > 0.5 && l > 0.4) f.r = Math.min(f.r, l);
+      else if (b - t > 0.5 && rt < 0.6) f.l = Math.max(f.l, rt);
+      else if (b > 0.7) f.b = Math.min(f.b, t);
+      else if (t < 0.3) f.t = Math.max(f.t, b);
+    }
+    const d = this.director.free;
+    if (Math.abs(d.l - f.l) + Math.abs(d.t - f.t) + Math.abs(d.r - f.r) + Math.abs(d.b - f.b) > 0.004) {
+      this.director.free = f;
+      // the first layout with the interface on screen: frame for it at once (the page is
+      // appearing), afterwards ease (a sheet collapsing, a phone turning)
+      if (!this.framedLayout && f.t > 0) {
+        this.framedLayout = true;
+        this.director.snapFraming();
+      }
+    }
+  }
+  private framedLayout = false;
+
+  /**
    * A tour chapter's physical starting point: no limits scenario, no push waiting, the cart's
    * objects where they belong (put back at once if the cart is away, or by the robot if it is
    * holding one), and the charge and temperatures of `energy`.
@@ -615,6 +747,34 @@ export class World {
     else if (this.manip.disturbed || this.manip.stage !== 'rest') this.manip.putBack();
     if (energy) this.energy.restore(energy);
     this.telemetry.mark('chapter-reset');
+  }
+
+  /** What is presented, as plain numbers (pose, hands, feet, objects, channels, belt, rotor,
+   * charge and temperatures, camera, the tour's clock). */
+  presentedState() {
+    const o = this.driver.out;
+    const r = (v: number) => Math.round(v * 1e6) / 1e6;
+    const objs: Record<string, number[]> = {};
+    for (const [id, p] of this.trackedObjects()) objs[id] = [r(p.x), r(p.y), r(p.z)];
+    const e = this.energy.snapshot();
+    const cam = this.stage.camera.position;
+    return {
+      q: Array.from(o.q, r),
+      pelvis: [r(o.pelvisPos.x), r(o.pelvisPos.y), r(o.pelvisPos.z)],
+      hands: this.displayedHandScalars().map(r),
+      feet: [this.driver.feet.L.ankle, this.driver.feet.R.ankle].flatMap((a) => [r(a.x), r(a.y), r(a.z)]),
+      objects: objs,
+      channels: Object.fromEntries(Object.entries(this.ch.values).map(([k, v]) => [k, r(v)])),
+      belt: r(this.walk.beltNow),
+      rotor: r(this.rotorAngle),
+      soc: Math.round(e.soc * 1e9) / 1e9,
+      temps: e.thermal.filter((x): x is [number, number] => !!x).map((x) => r(x[0])),
+      camera: [r(cam.x), r(cam.y), r(cam.z)],
+      tourT: r(this.tour.t),
+      config: JSON.stringify(useApp.getState().config),
+      source: this.driver.source?.id ?? '',
+      stage: this.manip.stage,
+    };
   }
 
   // ─────────────────────────── telemetry accessors ───────────────────────────
@@ -651,10 +811,29 @@ export class World {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
     this.running = false;
     cancelAnimationFrame(this.raf);
     for (const u of this.unsub) u();
+    this.unsub = [];
     for (const f of this.features) f.dispose?.();
+    // GPU resources: every geometry, material and texture the scene owns, then the context
+    const geos = new Set<{ dispose(): void }>();
+    const mats = new Set<import('three').Material>();
+    this.stage.scene.traverse((o) => {
+      const m = o as Mesh;
+      if (m.geometry) geos.add(m.geometry);
+      const mm = m.material as import('three').Material | import('three').Material[] | undefined;
+      if (Array.isArray(mm)) mm.forEach((x) => mats.add(x));
+      else if (mm) mats.add(mm);
+    });
+    for (const c of this.covers) (mats.add(c.rm.fade), mats.add(c.rm.solid));
+    for (const m of mats) {
+      for (const v of Object.values(m)) if (v && typeof v === 'object' && (v as { isTexture?: boolean }).isTexture) (v as { dispose(): void }).dispose();
+      m.dispose();
+    }
+    for (const g of geos) g.dispose();
     this.stage.dispose();
   }
 
@@ -664,6 +843,11 @@ export class World {
 }
 
 const _dir = new Vector3();
+const _cw = new Vector3();
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
 function frame(): Promise<void> {
   return new Promise((r) => requestAnimationFrame(() => r()));

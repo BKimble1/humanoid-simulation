@@ -29,6 +29,8 @@ export interface AppState {
   overlays: boolean;
   /** Phones: the panel sheet is collapsed to its title. */
   sheetMin: boolean;
+  /** The visitor has orbited away from the directed framing (a Recenter button shows). */
+  offFraming: boolean;
   sound: boolean;
   info: boolean;
   /** Loading: 0 … 1, and whether the world is ready. */
@@ -75,6 +77,7 @@ export const useApp = create<AppState>((set, get) => ({
   engineerTab: 'actuator',
   overlays: true,
   sheetMin: false,
+  offFraming: false,
   sound: false,
   info: false,
   progress: 0,

@@ -154,7 +154,7 @@ export class Telemetry {
         const p = corners[s][k];
         soleMin = Math.min(soleMin, p.y);
         const q = this.prevCorners?.[s][k];
-        if (!q || p.y > 0.004 || q.y > 0.004) continue;
+        if (!q || p.y > 0.0015 || q.y > 0.0015) continue;
         const onBelt = Math.abs(p.x) < 0.45; // the treadmill belt spans the robot's stance
         const dz = p.z - q.z - (onBelt ? beltDz : 0);
         const dx = p.x - q.x;

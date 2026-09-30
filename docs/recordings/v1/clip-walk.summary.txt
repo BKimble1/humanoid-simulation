@@ -1,0 +1,13 @@
+clip-walk: 370 frames, 2291 s, errors 0
+  joint speed max rad/s   7.436@127(sim.walk) 7.358@126(sim.walk) 6.546@128(sim.walk)
+  joint accel max rad/s²  214.157@126(sim.walk) 150.365@225(sim.walk) 146.545@153(sim.walk)
+  hand rate max 1/s       1.200@281(sim.balance,blend) 0.000@1(sim.walk,blend) 0.000@2(sim.walk,blend)
+  pelvis speed max m/s    0.474@230(sim.walk) 0.470@231(sim.walk) 0.465@236(sim.walk)
+  camera speed max m/s    3.234@24(sim.walk,blend) 3.229@25(sim.walk,blend) 3.217@23(sim.walk,blend)
+  camera accel max m/s²   6.322@11(sim.walk,blend) 6.274@12(sim.walk,blend) 6.268@10(sim.walk,blend)
+  camera clearance min m  3.296@136(sim.walk) 3.297@137(sim.walk) 3.298@135(sim.walk)
+  sole slip max m/s       0.061@284(sim.balance,blend) 0.061@307(sim.balance,blend) 0.033@308(sim.balance,blend)
+  sole min m              -0.000@169(sim.walk) -0.000@140(sim.walk) -0.000@212(sim.walk)
+  object speed max m/s    0.000@1(sim.walk,blend) 0.000@2(sim.walk,blend) 0.000@3(sim.walk,blend)
+  attach err max m        -1.000@1(sim.walk,blend) -1.000@2(sim.walk,blend) -1.000@3(sim.walk,blend)
+  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-walk.mp4

@@ -20,6 +20,8 @@ export const time = {
   now: 0,
   /** Duration of the current frame, s (clamped to 1/15 s so a stall never jumps a move). */
   dt: 1 / 60,
+  /** The real interval since the previous frame, s (not clamped: what the visitor waited). */
+  raw: 1 / 60,
   frame: 0,
   step: 1 / 30,
 };
@@ -38,6 +40,7 @@ export function tickRealtime(): number {
   const raw = (t - last) / 1000;
   last = t;
   const dt = hidden ? 0 : Math.min(1 / 15, Math.max(0, raw));
+  time.raw = hidden ? 0 : raw;
   time.dt = dt;
   time.now += dt;
   time.frame++;
@@ -46,6 +49,7 @@ export function tickRealtime(): number {
 
 /** Advance the clock by one virtual frame. */
 export function tickVirtual(): number {
+  time.raw = time.step;
   time.dt = time.step;
   time.now += time.step;
   time.frame++;

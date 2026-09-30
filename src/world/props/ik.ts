@@ -72,7 +72,12 @@ export class IkProp {
       e.stopImmediatePropagation();
       e.preventDefault();
       this.dragging = true;
-      canvas.setPointerCapture(e.pointerId);
+      w.director.claimed.add(e.pointerId);
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* synthetic events have no capture */
+      }
       const n = new Vector3();
       w.stage.camera.getWorldDirection(n);
       this.plane.setFromNormalAndCoplanarPoint(n, this.handle.position);
@@ -103,7 +108,12 @@ export class IkProp {
       if (!this.dragging) return;
       e.stopImmediatePropagation();
       this.dragging = false;
-      canvas.releasePointerCapture?.(e.pointerId);
+      w.director.claimed.delete(e.pointerId);
+      try {
+        canvas.releasePointerCapture?.(e.pointerId);
+      } catch {
+        /* not captured */
+      }
     };
     canvas.addEventListener('pointerdown', down, { capture: true });
     canvas.addEventListener('pointermove', move, { capture: true });

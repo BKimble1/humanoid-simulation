@@ -1,0 +1,13 @@
+clip-actuator: 425 frames, 1257 s, errors 0
+  joint speed max rad/s   0.209@2(explore.actuators) 0.142@3(explore.actuators) 0.095@4(explore.actuators)
+  joint accel max rad/s²  2.011@3(explore.actuators) 1.410@4(explore.actuators) 0.982@5(explore.actuators)
+  hand rate max 1/s       0.074@190(explore.actuators.open) 0.074@191(explore.actuators.open) 0.072@189(explore.actuators.open)
+  pelvis speed max m/s    0.026@55(explore.actuators.open) 0.025@403(explore.actuators.open) 0.025@12(explore.actuators)
+  camera speed max m/s    2.943@26(explore.actuators) 2.942@25(explore.actuators) 2.928@27(explore.actuators)
+  camera accel max m/s²   5.578@12(explore.actuators) 5.554@11(explore.actuators) 5.512@13(explore.actuators)
+  camera clearance min m  0.617@70(explore.actuators.open) 0.618@69(explore.actuators.open) 0.618@71(explore.actuators.open)
+  sole slip max m/s       0.000@362(explore.actuators.open) 0.000@385(explore.actuators.open) 0.000@16(explore.actuators)
+  sole min m              -0.000@185(explore.actuators.open) -0.000@271(explore.actuators.open) -0.000@44(explore.actuators.open)
+  object speed max m/s    0.000@1(explore.actuators) 0.000@2(explore.actuators) 0.000@3(explore.actuators)
+  attach err max m        -1.000@1(explore.actuators) -1.000@2(explore.actuators) -1.000@3(explore.actuators)
+  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-actuator.mp4

@@ -2,7 +2,7 @@
 
 FO-H1 is an original adult-size electric humanoid designed for this simulation. It is not a
 copy of any robot: public specifications of existing humanoids were used only as ranges
-(section 10). Everything the interface shows comes from one specification (`src/spec/`) and the
+(section 11). Everything the interface shows comes from one specification (`src/spec/`) and the
 models in `src/engine/`, and each value carries its provenance:
 
 | Mark | Meaning |
@@ -13,7 +13,8 @@ models in `src/engine/`, and each value carries its provenance:
 | **Visual approximation** | drawn for legibility only (slowed rotor, scaled arrows, heat spread, choreography) |
 
 The models are *reduced-order*: the kind used to size a machine and reason about it, not a
-full multibody-contact simulation. Section 9 lists what they leave out.
+full multibody-contact simulation. Section 10 lists what they leave out; section 9 describes
+how the motion is presented (blending, hand-overs, the presentation clock, the camera).
 
 ---
 
@@ -234,7 +235,58 @@ quasi-isotropic CFRP, 4140 steel, AZ91 magnesium (R94–R100). A first sizing ch
 
 ---
 
-## 9. Limitations
+## 9. Motion and presentation (`src/world/`, `src/scene/camera/`)
+
+What is drawn is a presentation of the models above; this section says how it is kept
+continuous and honest. None of it changes a computed value.
+
+- **One displayed pose** (`world/pose.ts`). Pose sources (idle, walking, balance, reaching,
+  manipulation) each produce a target; the pose driver shows one. A change of source, or of a
+  source's posture (an idle preset, carrying or not), starts an inertialized blend: the displayed
+  pose is the target plus an offset that decays to zero on a quintic, starting with the offset's
+  own velocity, so nothing jumps and nothing restarts from rest. Blend times come from limits:
+  joints 2.4 rad/s and 12 rad/s², pelvis 0.4 m/s and 2.5 m/s², hand scalars 2.6/s (at most
+  2.4 s). Legs are solved to the displayed feet in task space, so a planted foot stays planted.
+- **Hand-overs wait for support.** A source is left only when it can be (no foot in the air, the
+  belt stopped, nothing in the hand): walking finishes its step and stops, manipulation puts the
+  object back first. The stance keeper steps the feet into a stance one foot at a time (weight
+  shift at 0.26 m/s, foot carried at 0.6 m/s). Feet carry their contact and support (floor or
+  treadmill belt).
+- **Hands** are part of the displayed pose (four finger flexions, thumb flexion and opposition,
+  spread per hand), blended with the body.
+- **Manipulation stages** (reach, approach, close, lift, hold, place, release, retract) have fixed
+  durations (a hold lasts until the object is put down); the time left over at a stage boundary carries into the next, and the next stage
+  starts from the arm actually shown. The object is attached where the hand closed on it.
+  **Slip is drawn magnified ×4** (it is millimetres); the lab says so next to the slip readout.
+- **Presentation clock.** The guided tour's pause stops everything it presents (poses, belt,
+  rotor, heat and charge, channels, camera moves, the tour's timeline); the interface and the
+  visitor's own camera keep the real clock. Nothing catches up on play.
+- **Energy has one owner.** While walking is shown, the gait's own 100 Hz loop steps the battery
+  and thermal models; otherwise they are stepped in fixed 10 ms steps from the displayed loads.
+  The same simulated time gives the same charge and temperatures at 30, 60 or 120 frames per
+  second or irregular frames (tested within 1 % of the charge used and 0.05 K).
+- **Tour chapters** start from a baseline: the default design and lab settings plus the chapter's
+  own, the charge and temperatures the tour started with. Timed actions fire once per visit.
+  Leaving restores the visitor's design, settings, actuator, charge and temperatures.
+- **Camera** (`scene/camera/director.ts`). Moves are quintic from the current position and
+  velocity (the carried velocity bounded so it cannot throw the path wide). The robot is
+  approximated by capsules (torso, head, limbs, hands); each move's path is checked against them
+  and swings out as little as needed, and a soft avoidance keeps a moving robot off the lens.
+  A shot frames a subject box: on phones its distance and lens shift come from the part of the
+  view the header, panel or sheet and caption bar leave free (measured from the page), so a
+  collapsed sheet or a turned phone reframes it; on larger screens the composed shot stands
+  when the subject fits. Follow shots track a filtered anchor, not the robot's millimetre sway.
+- **Actuator hand-over.** With an actuator open, choosing another closes the open one, moves
+  the camera, then reveals the new one (interruptible: choosing the first again reverses).
+- **Evidence.** Developer telemetry (`world/telemetry.ts`, test hooks only) measures every frame:
+  joint speed and acceleration, hand rate, pelvis speed, camera speed, acceleration and
+  clearance, planted-sole slip relative to its support, object speed and attachment. The browser
+  tests (`e2e/continuity.spec.ts`, `e2e/watch.spec.ts`, `e2e/camera.spec.ts`) hold them to the
+  limits stated there; `docs/V2-BASELINE.md` records what they measured in V1.
+
+---
+
+## 10. Limitations
 
 - Motions are generated by planners and tracked exactly; the dynamics are computed from them
   (inverse dynamics), not integrated forward from forces. There is no rigid-body contact
@@ -256,7 +308,7 @@ quasi-isotropic CFRP, 4140 steel, AZ91 magnesium (R94–R100). A first sizing ch
 
 ---
 
-## 10. Sources
+## 11. Sources
 
 Public specifications of adult-size humanoids were used only as ranges (height 1.6–1.8 m, mass
 55–75 kg, batteries 0.8–2.3 kWh, payload 15–25 kg, joint peaks 150–360 Nm): Unitree H1 [R1–R3],

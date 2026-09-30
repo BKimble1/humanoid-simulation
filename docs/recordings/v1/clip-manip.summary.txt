@@ -1,0 +1,13 @@
+clip-manip: 450 frames, 2281 s, errors 0
+  joint speed max rad/s   38.625@302(sim.manipulation) 37.745@301(sim.manipulation) 37.136@102(sim.manipulation)
+  joint accel max rad/s²  2291.090@302(sim.manipulation) 1893.753@186(sim.manipulation) 1354.131@102(sim.manipulation)
+  hand rate max 1/s       4.016@347(sim.manipulation) 3.592@348(sim.manipulation) 3.167@349(sim.manipulation)
+  pelvis speed max m/s    0.454@101(sim.manipulation) 0.448@362(sim.manipulation) 0.372@102(sim.manipulation)
+  camera speed max m/s    4.113@36(sim.manipulation) 4.109@35(sim.manipulation) 4.105@37(sim.manipulation)
+  camera accel max m/s²   5.602@16(sim.manipulation,blend) 5.599@17(sim.manipulation,blend) 5.566@15(sim.manipulation,blend)
+  camera clearance min m  1.777@145(sim.manipulation) 1.777@147(sim.manipulation) 1.777@101(sim.manipulation)
+  sole slip max m/s       0.005@15(sim.manipulation,blend) 0.005@16(sim.manipulation,blend) 0.004@17(sim.manipulation,blend)
+  sole min m              -0.000@318(sim.manipulation) -0.000@332(sim.manipulation) -0.000@300(sim.manipulation)
+  object speed max m/s    4.685@185(sim.manipulation) 4.665@186(sim.manipulation) 4.177@302(sim.manipulation)
+  attach err max m        0.000@167(sim.manipulation) 0.000@168(sim.manipulation) 0.000@169(sim.manipulation)
+  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-manip.mp4

@@ -87,13 +87,13 @@ export const DIM = {
   heel: -0.07,
   toe: 0.18,
   footWidth: 0.105,
-  /** Pelvis (hip joint line) to waist yaw axis origin. */
-  waistHeight: 0.12,
+  /** Pelvis (hip joint line) to the waist yaw joint (top of the pelvis saddle). */
+  waistHeight: 0.17,
   /** Waist to shoulder joint line. */
-  shoulderHeight: 0.385,
-  shoulderHalfWidth: 0.185,
+  shoulderHeight: 0.335,
+  shoulderHalfWidth: 0.195,
   /** Waist to neck yaw. */
-  neckHeight: 0.46,
+  neckHeight: 0.41,
   neckLength: 0.045,
   upperArm: 0.29,
   forearm: 0.25,
@@ -102,8 +102,11 @@ export const DIM = {
   hand: 0.185,
 } as const;
 
+/** Wrist yaw joint below the elbow, m (clear of the elbow actuator). */
+export const WRIST_YAW_Y = 0.115;
+
 /** Knee actuator axis below the hip on the thigh, m (drives the knee through a push rod). */
-export const KNEE_DRIVE_Y = 0.115;
+export const KNEE_DRIVE_Y = 0.125;
 /** Crank radius of the knee's parallel linkage (both cranks), m. */
 export const KNEE_CRANK = 0.045;
 
@@ -131,8 +134,8 @@ function armJoints(side: Side): JointSpec[] {
     { id: `${side}_shoulder_roll`, label: 'Shoulder roll', parent: `${side}_shoulder_link`, child: `${side}_shoulder_roll_link`, origin: [0, 0, 0], axis: [0, 0, s], min: -15, max: 165, actuator: 'A60', maxVelocity: 8, group: 'arm' },
     { id: `${side}_arm_yaw`, label: 'Upper-arm yaw', parent: `${side}_shoulder_roll_link`, child: `${side}_upper_arm`, origin: [0, 0, 0], axis: [0, s, 0], min: -90, max: 90, actuator: 'A60', maxVelocity: 9, group: 'arm' },
     { id: `${side}_elbow`, label: 'Elbow', parent: `${side}_upper_arm`, child: `${side}_forearm`, origin: [0, -DIM.upperArm, 0], axis: [-1, 0, 0], min: 0, max: 145, actuator: 'A80', maxVelocity: 9, group: 'arm' },
-    { id: `${side}_wrist_yaw`, label: 'Wrist yaw', parent: `${side}_forearm`, child: `${side}_wrist_link`, origin: [0, -0.06, 0], axis: [0, s, 0], min: -90, max: 90, actuator: 'A45', maxVelocity: 5, group: 'arm' },
-    { id: `${side}_wrist_pitch`, label: 'Wrist pitch', parent: `${side}_wrist_link`, child: `${side}_wrist_cross`, origin: [0, -(DIM.forearm - 0.06), 0], axis: [-1, 0, 0], min: -70, max: 70, actuator: 'A45', maxVelocity: 5, group: 'arm' },
+    { id: `${side}_wrist_yaw`, label: 'Wrist yaw', parent: `${side}_forearm`, child: `${side}_wrist_link`, origin: [0, -WRIST_YAW_Y, 0], axis: [0, s, 0], min: -90, max: 90, actuator: 'A45', maxVelocity: 5, group: 'arm' },
+    { id: `${side}_wrist_pitch`, label: 'Wrist pitch', parent: `${side}_wrist_link`, child: `${side}_wrist_cross`, origin: [0, -(DIM.forearm - WRIST_YAW_Y), 0], axis: [-1, 0, 0], min: -70, max: 70, actuator: 'A45', maxVelocity: 5, group: 'arm' },
     { id: `${side}_wrist_roll`, label: 'Wrist roll', parent: `${side}_wrist_cross`, child: `${side}_hand`, origin: [0, 0, 0], axis: [0, 0, s], min: -35, max: 35, actuator: 'A45', maxVelocity: 5, group: 'arm' },
   ];
 }
@@ -194,18 +197,18 @@ function legMass(side: Side): MassItem[] {
   const s = S(side);
   const p = side;
   return [
-    { id: `${p}_hip_yaw_act`, label: 'Hip yaw actuator', segment: 'pelvis', mass: A.A80.mass, at: [s * DIM.hipHalfWidth, 0.075, -0.005], subsystem: 'actuator' },
-    { id: `${p}_hip_roll_act`, label: 'Hip roll actuator', segment: `${p}_hip_yaw_link`, mass: A.A100.mass, at: [0, -0.005, -0.07], subsystem: 'actuator' },
-    { id: `${p}_hip_yaw_bracket`, label: 'Hip yaw bracket', segment: `${p}_hip_yaw_link`, mass: 0.26, at: [0, 0.03, -0.02], subsystem: 'structure' },
+    { id: `${p}_hip_yaw_act`, label: 'Hip yaw actuator', segment: 'pelvis', mass: A.A80.mass, at: [s * DIM.hipHalfWidth, 0.105, 0], subsystem: 'actuator' },
+    { id: `${p}_hip_roll_act`, label: 'Hip roll actuator', segment: `${p}_hip_yaw_link`, mass: A.A100.mass, at: [0, 0, -0.108], subsystem: 'actuator' },
+    { id: `${p}_hip_yaw_bracket`, label: 'Hip yaw bracket', segment: `${p}_hip_yaw_link`, mass: 0.26, at: [0, 0.05, -0.08], subsystem: 'structure' },
     { id: `${p}_hip_pitch_act`, label: 'Hip pitch actuator', segment: `${p}_hip_roll_link`, mass: A.A100.mass, at: [s * 0.055, 0, 0], subsystem: 'actuator' },
-    { id: `${p}_hip_roll_bracket`, label: 'Hip roll clevis', segment: `${p}_hip_roll_link`, mass: 0.22, at: [0, 0.01, 0], subsystem: 'structure' },
+    { id: `${p}_hip_roll_bracket`, label: 'Hip roll clevis', segment: `${p}_hip_roll_link`, mass: 0.22, at: [s * 0.03, 0, -0.05], subsystem: 'structure' },
     { id: `${p}_thigh_member`, label: 'Thigh structural member', segment: `${p}_thigh`, mass: 0.95, at: [0, -0.2, 0], subsystem: 'structure', material: 'legMember' },
     { id: `${p}_thigh_shell`, label: 'Thigh covers', segment: `${p}_thigh`, mass: 0.45, at: [0, -0.18, 0.012], subsystem: 'shell' },
     // The knee actuator sits high on the thigh and drives the knee through a parallel push-rod
     // linkage (1:1): its 2.1 kg is 0.3 m closer to the hip, which cuts the swinging leg's
     // inertia about the hip by ~0.3 kg·m².
-    { id: `${p}_knee_act`, label: 'Knee actuator', segment: `${p}_thigh`, mass: A.A100.mass, at: [0, -KNEE_DRIVE_Y, -0.012], subsystem: 'actuator' },
-    { id: `${p}_knee_linkage`, label: 'Knee push rod and cranks', segment: `${p}_thigh`, mass: 0.16, at: [0, -0.27, -0.045], subsystem: 'structure' },
+    { id: `${p}_knee_act`, label: 'Knee actuator', segment: `${p}_thigh`, mass: A.A100.mass, at: [s * 0.071, -KNEE_DRIVE_Y, 0], subsystem: 'actuator' },
+    { id: `${p}_knee_linkage`, label: 'Knee push rod and cranks', segment: `${p}_thigh`, mass: 0.16, at: [s * 0.02, -0.27, -0.045], subsystem: 'structure' },
     { id: `${p}_thigh_harness`, label: 'Thigh harness', segment: `${p}_thigh`, mass: 0.1, at: [0, -0.2, -0.03], subsystem: 'wiring' },
     { id: `${p}_shin_member`, label: 'Shin structural member', segment: `${p}_shin`, mass: 0.7, at: [0, -0.2, 0], subsystem: 'structure', material: 'legMember' },
     { id: `${p}_shin_shell`, label: 'Shin covers', segment: `${p}_shin`, mass: 0.3, at: [0, -0.17, 0.02], subsystem: 'shell' },
@@ -223,18 +226,18 @@ function armMass(side: Side): MassItem[] {
   const p = side;
   return [
     { id: `${p}_shoulder_pitch_act`, label: 'Shoulder pitch actuator', segment: 'torso', mass: A.A80.mass, at: [s * (DIM.shoulderHalfWidth - 0.045), DIM.shoulderHeight, -0.01], subsystem: 'actuator' },
-    { id: `${p}_shoulder_roll_act`, label: 'Shoulder roll actuator', segment: `${p}_shoulder_link`, mass: A.A60.mass, at: [s * 0.03, 0, -0.035], subsystem: 'actuator' },
+    { id: `${p}_shoulder_roll_act`, label: 'Shoulder roll actuator', segment: `${p}_shoulder_link`, mass: A.A60.mass, at: [0, 0, -0.085], subsystem: 'actuator' },
     { id: `${p}_shoulder_bracket`, label: 'Shoulder bracket', segment: `${p}_shoulder_link`, mass: 0.15, at: [s * 0.02, 0, 0], subsystem: 'structure' },
-    { id: `${p}_arm_yaw_act`, label: 'Upper-arm yaw actuator', segment: `${p}_shoulder_roll_link`, mass: A.A60.mass, at: [0, -0.075, 0], subsystem: 'actuator' },
+    { id: `${p}_arm_yaw_act`, label: 'Upper-arm yaw actuator', segment: `${p}_shoulder_roll_link`, mass: A.A60.mass, at: [0, -0.089, 0], subsystem: 'actuator' },
     { id: `${p}_arm_yaw_bracket`, label: 'Shoulder roll clevis', segment: `${p}_shoulder_roll_link`, mass: 0.1, at: [0, -0.02, 0], subsystem: 'structure' },
     { id: `${p}_upper_arm_member`, label: 'Upper-arm structure', segment: `${p}_upper_arm`, mass: 0.35, at: [0, -0.16, 0], subsystem: 'structure', material: 'armMember' },
     { id: `${p}_upper_arm_shell`, label: 'Upper-arm covers', segment: `${p}_upper_arm`, mass: 0.2, at: [0, -0.15, 0.005], subsystem: 'shell' },
     { id: `${p}_elbow_act`, label: 'Elbow actuator', segment: `${p}_upper_arm`, mass: A.A80.mass, at: [0, -DIM.upperArm + 0.01, 0], subsystem: 'actuator' },
-    { id: `${p}_forearm_member`, label: 'Forearm structure', segment: `${p}_forearm`, mass: 0.25, at: [0, -0.13, 0], subsystem: 'structure', material: 'armMember' },
-    { id: `${p}_forearm_shell`, label: 'Forearm covers', segment: `${p}_forearm`, mass: 0.15, at: [0, -0.12, 0.004], subsystem: 'shell' },
-    { id: `${p}_wrist_yaw_act`, label: 'Wrist yaw actuator', segment: `${p}_forearm`, mass: A.A45.mass, at: [0, -0.035, 0], subsystem: 'actuator' },
-    { id: `${p}_wrist_pitch_act`, label: 'Wrist pitch actuator', segment: `${p}_wrist_link`, mass: A.A45.mass, at: [0, -0.12, 0], subsystem: 'actuator' },
-    { id: `${p}_wrist_roll_act`, label: 'Wrist roll actuator', segment: `${p}_wrist_link`, mass: A.A45.mass, at: [0, -0.165, 0], subsystem: 'actuator' },
+    { id: `${p}_forearm_member`, label: 'Forearm structure', segment: `${p}_forearm`, mass: 0.25, at: [0, -0.1, 0], subsystem: 'structure', material: 'armMember' },
+    { id: `${p}_forearm_shell`, label: 'Forearm covers', segment: `${p}_forearm`, mass: 0.15, at: [0, -0.11, 0.004], subsystem: 'shell' },
+    { id: `${p}_wrist_yaw_act`, label: 'Wrist yaw actuator', segment: `${p}_forearm`, mass: A.A45.mass, at: [0, -0.084, 0], subsystem: 'actuator' },
+    { id: `${p}_wrist_pitch_act`, label: 'Wrist pitch actuator', segment: `${p}_wrist_link`, mass: A.A45.mass, at: [0, -0.035, 0], subsystem: 'actuator' },
+    { id: `${p}_wrist_roll_act`, label: 'Wrist roll actuator', segment: `${p}_wrist_link`, mass: A.A45.mass, at: [0, -0.1, 0], subsystem: 'actuator' },
     { id: `${p}_ft_wrist`, label: 'Wrist force/torque sensor', segment: `${p}_hand`, mass: 0.18, at: [0, -0.012, 0], subsystem: 'sensor' },
     { id: `${p}_palm`, label: 'Palm frame and covers', segment: `${p}_hand`, mass: 0.26, at: [0, -0.07, 0.006], subsystem: 'hand' },
     { id: `${p}_finger_acts`, label: 'Finger actuators (6)', segment: `${p}_hand`, mass: 6 * FINGER_ACTUATOR.mass, at: [0, -0.065, -0.004], subsystem: 'hand' },
@@ -244,21 +247,21 @@ function armMass(side: Side): MassItem[] {
 }
 
 export const MASS_ITEMS: MassItem[] = [
-  { id: 'pelvis_frame', label: 'Pelvis frame', segment: 'pelvis', mass: 1.9, at: [0, 0.035, -0.012], subsystem: 'structure' },
-  { id: 'pelvis_shell', label: 'Pelvis covers', segment: 'pelvis', mass: 0.55, at: [0, 0.03, 0.012], subsystem: 'shell' },
-  { id: 'imu_main', label: 'Primary IMU and pelvis hub', segment: 'pelvis', mass: 0.25, at: [0, 0.05, -0.03], subsystem: 'sensor' },
-  { id: 'waist_act', label: 'Waist yaw actuator', segment: 'pelvis', mass: A.A80.mass, at: [0, 0.085, 0], subsystem: 'actuator' },
+  { id: 'pelvis_frame', label: 'Pelvis frame', segment: 'pelvis', mass: 1.9, at: [0, 0.115, -0.01], subsystem: 'structure' },
+  { id: 'pelvis_shell', label: 'Pelvis covers', segment: 'pelvis', mass: 0.55, at: [0, 0.1, 0.03], subsystem: 'shell' },
+  { id: 'imu_main', label: 'Primary IMU and pelvis hub', segment: 'pelvis', mass: 0.25, at: [0, 0.11, -0.03], subsystem: 'sensor' },
+  { id: 'waist_act', label: 'Waist yaw actuator', segment: 'torso', mass: A.A80.mass, at: [0, 0.037, 0], subsystem: 'actuator' },
   ...legMass('L'),
   ...legMass('R'),
-  { id: 'torso_frame', label: 'Torso frame and ribs', segment: 'torso', mass: 3.2, at: [0, 0.22, -0.02], subsystem: 'structure' },
-  { id: 'torso_shell', label: 'Chest and back covers', segment: 'torso', mass: 1.4, at: [0, 0.25, 0.01], subsystem: 'shell' },
-  { id: 'battery', label: 'Battery pack', segment: 'torso', mass: 11.5, at: [0, 0.19, 0.012], subsystem: 'power' },
-  { id: 'perception_pc', label: 'Perception and planning computer', segment: 'torso', mass: 1.1, at: [0, 0.33, -0.085], subsystem: 'compute' },
-  { id: 'rt_controller', label: 'Real-time controller and safety MCU', segment: 'torso', mass: 0.45, at: [0, 0.255, -0.095], subsystem: 'compute' },
-  { id: 'power_dist', label: 'Power distribution (contactors, DC/DC, fuses)', segment: 'torso', mass: 0.9, at: [0, 0.075, -0.06], subsystem: 'power' },
-  { id: 'harness', label: 'Main wiring harness', segment: 'torso', mass: 0.8, at: [0, 0.24, -0.02], subsystem: 'wiring' },
-  { id: 'chest_depth', label: 'Chest depth camera', segment: 'torso', mass: 0.15, at: [0, 0.34, 0.11], subsystem: 'sensor' },
-  { id: 'fans', label: 'Cooling fans and ducts', segment: 'torso', mass: 0.25, at: [0, 0.3, -0.11], subsystem: 'compute' },
+  { id: 'torso_frame', label: 'Torso frame and ribs', segment: 'torso', mass: 3.2, at: [0, 0.17, -0.03], subsystem: 'structure' },
+  { id: 'torso_shell', label: 'Chest and back covers', segment: 'torso', mass: 1.4, at: [0, 0.2, 0.01], subsystem: 'shell' },
+  { id: 'battery', label: 'Battery pack', segment: 'torso', mass: 11.5, at: [0, 0.155, 0.012], subsystem: 'power' },
+  { id: 'perception_pc', label: 'Perception and planning computer', segment: 'torso', mass: 1.1, at: [0, 0.27, -0.125], subsystem: 'compute' },
+  { id: 'rt_controller', label: 'Real-time controller and safety MCU', segment: 'torso', mass: 0.45, at: [0, 0.19, -0.12], subsystem: 'compute' },
+  { id: 'power_dist', label: 'Power distribution (contactors, DC/DC, fuses)', segment: 'torso', mass: 0.9, at: [0, 0.085, -0.055], subsystem: 'power' },
+  { id: 'harness', label: 'Main wiring harness', segment: 'torso', mass: 0.8, at: [0, 0.19, -0.03], subsystem: 'wiring' },
+  { id: 'chest_depth', label: 'Chest depth camera', segment: 'torso', mass: 0.15, at: [0, 0.3, 0.115], subsystem: 'sensor' },
+  { id: 'fans', label: 'Cooling fans and ducts', segment: 'torso', mass: 0.25, at: [0, 0.3, -0.14], subsystem: 'compute' },
   { id: 'neck_yaw_act', label: 'Neck yaw actuator', segment: 'torso', mass: A.A45.mass, at: [0, DIM.neckHeight - 0.03, -0.012], subsystem: 'actuator' },
   ...armMass('L'),
   ...armMass('R'),

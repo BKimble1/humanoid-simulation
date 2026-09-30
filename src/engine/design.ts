@@ -9,7 +9,7 @@
  *   squat       deep squat reaching the payload at knee height               (statics)
  *   single      standing on one leg                                          (statics)
  *   stepUp      one leg lifting the whole robot onto an 18 cm step, knee 70° (statics ×1.15)
- *   walk        1.0 m/s on the treadmill, carrying the payload if any        (dynamics, 2 s)
+ *   walk        1.0 m/s on the treadmill; with a payload, 0.5 m/s carrying it (dynamics, 2 s)
  */
 import { Quaternion, Vector2, Vector3 } from 'three';
 import { WINDING } from '../spec/actuators';
@@ -33,8 +33,14 @@ export const TASK_LABEL: Record<TaskId, string> = {
   squat: 'Squat and lift',
   single: 'One-leg stance',
   stepUp: 'Step up 18 cm',
-  walk: 'Walking 1.0 m/s',
+  walk: 'Walking',
 };
+
+/** A task's name for a configuration (walking is slower with a payload). */
+export function taskLabel(id: TaskId, config: RobotConfig): string {
+  if (id !== 'walk') return TASK_LABEL[id];
+  return config.payload > 0 ? `Walking ${GAITS.slow.speed} m/s with the payload` : `Walking ${GAITS.normal.speed} m/s`;
+}
 
 export interface JointLoad {
   /** Peak |torque| and RMS torque in the task, Nm. */
@@ -185,7 +191,9 @@ export function analyzeDesign(config: RobotConfig): DesignReport {
   const walkPose = new Pose();
   const loads: JointLoad[] = JOINTS.map(() => ({ peak: 0, rms: 0, speed: 0 }));
   const sumSq = new Float64Array(NJ);
-  gen.walk(GAITS.normal);
+  // carrying, FO-H1 walks at its slow gait (as people do with a heavy load)
+  const walkGait = config.payload > 0 ? GAITS.slow : GAITS.normal;
+  gen.walk(walkGait);
   let samples = 0;
   let pWalk = 0;
   let pMech = 0;
@@ -285,7 +293,7 @@ export function analyzeDesign(config: RobotConfig): DesignReport {
   const pack = model.pack;
   const mixedPower = 0.5 * pWalk + 0.5 * standingPower;
   const runtime = { walking: runtimeHours(pack, pWalk), standing: runtimeHours(pack, standingPower), mixed: runtimeHours(pack, mixedPower) };
-  const speed = GAITS.normal.speed;
+  const speed = walkGait.speed;
   const cot = pWalk / (model.totalMass * GRAVITY * speed);
 
   // steady-state winding temperature for walking duty, from RMS current
@@ -351,7 +359,7 @@ function buildFindings(
   for (const c of worst) {
     const key = c.label;
     if (seen.has(key)) continue;
-    const task = TASK_LABEL[c.task].toLowerCase();
+    const task = taskLabel(c.task, model.config).toLowerCase();
     if (c.peakRatio > 1) {
       seen.add(key);
       out.push({

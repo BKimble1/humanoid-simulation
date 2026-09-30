@@ -55,7 +55,7 @@ export class IdleSource implements PoseSource {
   /** Amplitude of the living motion (0 frozen … 1 normal). */
   life = 1;
   /** Arm target for the showHand preset (world), set by the scene. */
-  handTarget = new Vector3(0.18, 1.2, 0.36);
+  handTarget = new Vector3(0.3, 1.3, 0.3);
   private armPose = new Pose();
   held: Held | null = null;
 

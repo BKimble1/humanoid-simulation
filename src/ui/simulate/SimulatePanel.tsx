@@ -2,6 +2,7 @@
  * Simulate: the labs. A rail on the left (like Explore), the selected lab's controls, live
  * numbers and plots on the right. Every lab drives the same FO-H1 in the same scene.
  */
+import { SheetHandle } from '../SheetHandle';
 import { useApp, type LabId } from '../../state/store';
 import type { World } from '../../world/world';
 import { Legend } from '../kit';
@@ -25,6 +26,7 @@ export const LABS: { id: Exclude<LabId, 'hub'>; title: string; short: string; le
 
 export function SimulatePanel({ world }: { world: World }) {
   const lab = useApp((s) => s.lab);
+  const sheetMin = useApp((s) => s.sheetMin);
   const go = useApp((s) => s.go);
   const info = LABS.find((l) => l.id === lab);
   return (
@@ -37,7 +39,8 @@ export function SimulatePanel({ world }: { world: World }) {
           </button>
         ))}
       </nav>
-      <aside className="side panel pe" aria-labelledby="lab-title" key={lab}>
+      <aside className={`side panel pe ${sheetMin ? 'side--min' : ''}`} aria-labelledby="lab-title" key={lab}>
+        <SheetHandle />
         {!info ? (
           <>
             <p className="eyebrow">Simulate</p>

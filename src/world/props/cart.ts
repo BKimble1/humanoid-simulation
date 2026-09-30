@@ -29,7 +29,7 @@ export class CartProp {
   items = {} as Record<ItemId, Group>;
   liquid: Mesh;
   /** Docked amount 0 (away) … 1 (in place), eased. */
-  private dock = 0;
+  dock = 0;
 
   constructor() {
     this.root.name = 'cart';

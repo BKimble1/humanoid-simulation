@@ -4,6 +4,7 @@
  * the panel itself only describes.
  */
 import { SYSTEMS, SYSTEM_BY_ID } from '../../content/systems';
+import { SheetHandle } from '../SheetHandle';
 import { useApp, type SystemId } from '../../state/store';
 import type { World } from '../../world/world';
 import { Btn, Legend, Segmented, SpecRow } from '../kit';
@@ -22,6 +23,7 @@ const HOVER: Partial<Record<SystemId, import('../../scene/robot/rig').VisualGrou
 export function ExplorePanel({ world }: { world: World }) {
   const system = useApp((s) => s.system);
   const go = useApp((s) => s.go);
+  const sheetMin = useApp((s) => s.sheetMin);
   const exploded = useApp((s) => s.exploded);
   const info = SYSTEM_BY_ID[system];
   // opened actuator: the panel is about the parts and the live numbers
@@ -43,7 +45,8 @@ export function ExplorePanel({ world }: { world: World }) {
           </button>
         ))}
       </nav>
-      <aside className="side panel pe" aria-labelledby="sys-title" key={system}>
+      <aside className={`side panel pe ${sheetMin ? 'side--min' : ''}`} aria-labelledby="sys-title" key={system}>
+        <SheetHandle />
         <p className="eyebrow">{system === 'overview' ? 'Explore' : 'Subsystem'}</p>
         <h2 className="side__title" id="sys-title">
           {info.title}

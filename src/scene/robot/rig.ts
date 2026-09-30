@@ -75,7 +75,7 @@ export class RobotRig {
   /** Placement of each separately built actuator exterior in its holder's frame. */
   partFrames = new Map<string, Matrix4>();
   /** Named points on the robot (for labels, camera framing, overlays), per segment. */
-  anchors = new Map<string, { seg: SegmentId; local: Vector3 }>();
+  anchors = new Map<string, { seg: SegmentId; local: Vector3; obj?: Object3D }>();
   private pending = new Map<string, Pending>();
   scale: LimbScale = { ...UNIT_SCALE };
   /** Called after each pose is applied (linkages, rods, fingers). */
@@ -138,8 +138,8 @@ export class RobotRig {
     p.geos.push({ g: clean(g), look });
   }
 
-  anchor(name: string, seg: SegmentId, local: Vector3 | [number, number, number]) {
-    this.anchors.set(name, { seg, local: Array.isArray(local) ? new Vector3(...local) : local.clone() });
+  anchor(name: string, seg: SegmentId, local: Vector3 | [number, number, number], obj?: Object3D) {
+    this.anchors.set(name, { seg, local: Array.isArray(local) ? new Vector3(...local) : local.clone(), obj });
   }
 
   /** Merge everything collected into meshes: one per (segment, subsystem, part). */
@@ -187,7 +187,7 @@ export class RobotRig {
   anchorWorld(name: string, out = new Vector3()): Vector3 {
     const a = this.anchors.get(name);
     if (!a) return out.set(0, 1, 0);
-    return out.copy(a.local).applyMatrix4(this.seg.get(a.seg)!.matrixWorld);
+    return out.copy(a.local).applyMatrix4((a.obj ?? this.seg.get(a.seg)!).matrixWorld);
   }
 
   /** World matrix of a segment. */

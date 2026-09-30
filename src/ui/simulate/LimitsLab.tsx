@@ -4,18 +4,15 @@
  */
 import { useMemo } from 'react';
 import { ACTUATORS, WINDING } from '../../spec/actuators';
-import { JOINTS } from '../../spec/body';
 import { PACK } from '../../spec/power';
 import { GRIP } from '../../engine/grasp';
 import { configureActuator, ratings } from '../../engine/actuator';
-import { analyzeDesign } from '../../engine/design';
+import { analyzeDesign, taskLabel } from '../../engine/design';
 import { useApp } from '../../state/store';
 import { LIMITS, type LimitId } from '../../world/limits';
 import type { World } from '../../world/world';
 import { Btn, Readout } from '../kit';
 import { Bar, Callout, n } from './parts';
-
-const kneeIdx = JOINTS.findIndex((j) => j.id === 'L_knee');
 
 export function LimitsLab({ world }: { world: World }) {
   const limit = useApp((s) => s.limit);
@@ -46,16 +43,17 @@ function Detail({ id, world, code }: { id: LimitId; world: World; code: string }
   const report = useMemo(() => (id === 'payload' ? analyzeDesign(config) : null), [id, config]);
   switch (id) {
     case 'payload': {
-      if (!report) return null;
-      const knee = report.checks.filter((c) => c.joint === kneeIdx || JOINTS[c.joint].id === 'R_knee').sort((a, b) => b.peakRatio - a.peakRatio)[0];
+      if (!report) return <p className="note-small">Analysing…</p>;
+      const worst = report.worst.filter((c, i, a) => a.findIndex((x) => x.label === c.label) === i).slice(0, 3);
       const f = report.findings.find((x) => x.severity === 'limit') ?? report.findings[0];
       return (
         <>
           <Callout tone="bad" title={f?.title ?? code}>
-            {f?.detail}
+            {f?.detail} {report.findings.filter((x) => x.severity === 'limit').length > 1 ? `${report.findings.filter((x) => x.severity === 'limit').length - 1} more limits are exceeded.` : ''}
           </Callout>
-          {knee && <Bar label={`Knee torque, ${knee.task === 'stepUp' ? 'stepping up' : knee.task}`} value={knee.required} limit={knee.available} unit="Nm" note="Required (inverse dynamics) against the actuator's peak torque." />}
-          {knee && <Bar label="Knee torque, sustained" value={knee.sustained} limit={knee.continuous} unit="Nm" note="Against the continuous (thermal) rating." />}
+          {worst.map((c) => (
+            <Bar key={c.label} label={`${c.label} · ${taskLabel(c.task, config).toLowerCase()}`} value={c.peakRatio >= c.contRatio ? c.required : c.sustained} limit={c.peakRatio >= c.contRatio ? c.available : c.continuous} unit="Nm" note={c.peakRatio >= c.contRatio ? 'Peak torque needed against what the actuator can give.' : 'Sustained torque against the continuous (thermal) rating.'} />
+          ))}
           <Remedies items={f?.remedies ?? []} />
         </>
       );
@@ -101,17 +99,19 @@ function Detail({ id, world, code }: { id: LimitId; world: World; code: string }
     case 'current': {
       const cmd = Math.abs(Number(r.jCurrentCmd ?? 0));
       const lim = Number(r.jPeakCurrent ?? 80);
-      const hold = Math.abs(Number(r.jTauGravity ?? 0));
-      const peak = ratings(world.props.rig.rig.act).peakTorque;
+      const rig = world.props.rig.rig;
+      // the torque needed with the leg straight (the hardest point), and what the actuator gives
+      const hold = Math.abs(rig.gravity(0));
+      const peak = ratings(rig.act).peakTorque;
       return (
         <>
           <Callout tone={r.jLimitedI || r.jLimitedV ? 'bad' : 'warn'} title={code}>
             {id === 'torque'
-              ? `With a 9 : 1 reducer the actuator's peak torque is ${n(peak)} Nm; holding 20 kg with the leg straight needs ${n(hold)} Nm. The drive is at its current limit and the shin stays where gravity leaves it.`
+              ? `With an ${n(r.jRatio)} : 1 reducer the actuator's peak torque is ${n(peak)} Nm; holding 20 kg with the leg straight needs ${n(hold)} Nm. The drive reaches its current limit and the shin stops at ${n(r.jQ)}°, where gravity's torque (m·g·r·cos θ) equals what the actuator can give.`
               : `The fast lift asks the drive for ${n(cmd)} A; it gives ${n(lim)} A at most (the limit protects the transistors and the magnets). The joint follows the path late and overshoots once the demand falls.`}
           </Callout>
           <Bar label="Current asked" value={cmd} limit={lim} unit="A" />
-          <Bar label="Torque needed to hold" value={hold} limit={peak} unit="Nm" />
+          <Bar label="Torque needed with the leg straight" value={hold} limit={peak} unit="Nm" />
           <div className="readouts readouts--3">
             <Readout label="Angle" value={n(r.jQ, 1)} unit="°" />
             <Readout label="Error" value={n(r.jErr, 1)} unit="°" tone={Math.abs(Number(r.jErr)) > 5 ? 'bad' : undefined} />

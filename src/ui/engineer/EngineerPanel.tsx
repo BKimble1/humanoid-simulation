@@ -11,7 +11,9 @@ import { PAYLOAD } from '../../spec/motion';
 import { configureActuator, ratings } from '../../engine/actuator';
 import { packSpec } from '../../engine/battery';
 import type { DesignSummary } from '../../engine/designWorker';
+import { taskLabel } from '../../engine/design';
 import { ACTUATORS } from '../../spec/actuators';
+import { SheetHandle } from '../SheetHandle';
 import { useApp, type AppState } from '../../state/store';
 import type { World } from '../../world/world';
 import { Btn, Readout, Segmented, Slider, SpecRow } from '../kit';
@@ -50,6 +52,7 @@ function useDesign(config: AppState['config']): { report: DesignSummary | null; 
 
 export function EngineerPanel({ world }: { world: World }) {
   const tab = useApp((s) => s.engineerTab);
+  const sheetMin = useApp((s) => s.sheetMin);
   const set = useApp((s) => s.set);
   const config = useApp((s) => s.config);
   const setConfig = useApp((s) => s.setConfig);
@@ -60,7 +63,8 @@ export function EngineerPanel({ world }: { world: World }) {
   const pack = packSpec(config.pack);
   void world;
   return (
-    <aside className="side side--wide panel pe" aria-labelledby="eng-title">
+    <aside className={`side side--wide panel pe ${sheetMin ? 'side--min' : ''}`} aria-labelledby="eng-title">
+        <SheetHandle />
       <p className="eyebrow">Engineer</p>
       <h2 className="side__title" id="eng-title">
         Change the design
@@ -204,7 +208,7 @@ function Report({ report, busy }: { report: DesignSummary | null; busy: boolean 
       ))}
       <h3 className="report__title">Hardest-working joints</h3>
       {worst.map((c) => (
-        <Bar key={`${c.label}-${c.task}`} label={`${c.label} · ${c.task === 'stepUp' ? 'step up' : c.task}`} value={Math.max(c.required, 0)} limit={c.available} soft={c.available * 0.85} unit="Nm" note={`sustained ${c.sustained.toFixed(0)} of ${c.continuous.toFixed(0)} Nm continuous`} />
+        <Bar key={c.label} label={`${c.label} · ${taskLabel(c.task, report.config).toLowerCase()}`} value={Math.max(c.required, 0)} limit={c.available} soft={c.available * 0.85} unit="Nm" note={`sustained ${c.sustained.toFixed(0)} of ${c.continuous.toFixed(0)} Nm continuous`} />
       ))}
     </section>
   );

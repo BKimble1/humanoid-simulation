@@ -27,6 +27,8 @@ export interface AppState {
   config: RobotConfig;
   engineerTab: 'actuator' | 'geometry' | 'battery' | 'materials' | 'payload';
   overlays: boolean;
+  /** Phones: the panel sheet is collapsed to its title. */
+  sheetMin: boolean;
   sound: boolean;
   info: boolean;
   /** Loading: 0 … 1, and whether the world is ready. */
@@ -44,6 +46,24 @@ export interface AppState {
   set: (p: Partial<AppState>) => void;
 }
 
+const MODES: Mode[] = ['intro', 'explore', 'engineer', 'simulate', 'watch'];
+const SYSTEM_IDS: SystemId[] = ['overview', 'structure', 'actuators', 'hands', 'vision', 'balance', 'forces', 'power', 'compute', 'thermal'];
+const LAB_IDS: LabId[] = ['hub', 'joint', 'kinematics', 'balance', 'walk', 'manipulation', 'wholebody', 'limits'];
+
+/** A place to start from the address (?mode=simulate&lab=walk): links from FAB / ONE and tests. */
+function fromUrl(): Partial<AppState> {
+  if (typeof window === 'undefined') return {};
+  const q = new URLSearchParams(window.location.search);
+  const out: Partial<AppState> = {};
+  const m = q.get('mode') as Mode | null;
+  if (m && MODES.includes(m) && m !== 'watch') out.mode = m;
+  const sys = q.get('system') as SystemId | null;
+  if (sys && SYSTEM_IDS.includes(sys)) (out.system = sys), (out.mode ??= 'explore');
+  const lab = q.get('lab') as LabId | null;
+  if (lab && LAB_IDS.includes(lab)) (out.lab = lab), (out.mode ??= 'simulate');
+  return out;
+}
+
 export const useApp = create<AppState>((set, get) => ({
   mode: 'intro',
   system: 'overview',
@@ -54,6 +74,7 @@ export const useApp = create<AppState>((set, get) => ({
   config: cloneConfig(DEFAULT_CONFIG),
   engineerTab: 'actuator',
   overlays: true,
+  sheetMin: false,
   sound: false,
   info: false,
   progress: 0,
@@ -65,7 +86,30 @@ export const useApp = create<AppState>((set, get) => ({
   setConfig: (c) => set({ config: typeof c === 'function' ? c(cloneConfig(get().config)) : { ...get().config, ...c } }),
   resetConfig: () => set({ config: cloneConfig(DEFAULT_CONFIG) }),
   set: (p) => set(p),
+  ...fromUrl(),
 }));
+
+/**
+ * The address follows where the visitor is (?mode=explore&system=power, ?mode=simulate&lab=walk),
+ * so a refresh or a shared link returns there. Replaced, not pushed: Back leaves the simulation,
+ * as it does for a single page. Test and quality options in the address are kept.
+ */
+export function syncAddress() {
+  if (typeof window === 'undefined') return () => {};
+  const write = (s: AppState) => {
+    const q = new URLSearchParams(window.location.search);
+    for (const k of ['mode', 'system', 'lab']) q.delete(k);
+    if (s.mode === 'explore') (q.set('mode', 'explore'), q.set('system', s.system));
+    else if (s.mode === 'simulate') (q.set('mode', 'simulate'), q.set('lab', s.lab));
+    else if (s.mode === 'engineer') q.set('mode', 'engineer');
+    const qs = q.toString();
+    const url = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`;
+    if (url !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.replaceState(window.history.state, '', url);
+  };
+  return useApp.subscribe((s, prev) => {
+    if (s.mode !== prev.mode || s.system !== prev.system || s.lab !== prev.lab) write(s);
+  });
+}
 
 /** Lab parameters, kept apart so dragging a slider re-renders only its panel. */
 export interface LabParams {

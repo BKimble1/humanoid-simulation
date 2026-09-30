@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.ts'],
+    // local probes (not in the repository)
+    exclude: ['src/__debug__/**', 'node_modules/**'],
     environment: 'node',
     testTimeout: 60000,
   },

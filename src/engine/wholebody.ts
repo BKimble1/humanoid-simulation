@@ -111,6 +111,11 @@ function limitLegReach(pose: Pose, feet: { L: FootTarget; R: FootTarget }, kin: 
   pose.pelvisPos.y -= drop;
 }
 
+/** Pelvis height standing with the knees bent 12°, for the current limb lengths. */
+export function standHeight(kin: Kinematics): number {
+  return DIM.ankleHeight + (DIM.thigh * kin.scale.thigh + DIM.shin * kin.scale.shin) * Math.cos(12 * DEG) - 0.004;
+}
+
 /** Foot target standing flat at a ground point with a heading. */
 export function flatFoot(x: number, z: number, yaw = 0): FootTarget {
   const quat = new Quaternion().setFromAxisAngle(Y, yaw);
@@ -139,21 +144,21 @@ export function walkingArms(legLead: number, stepLength: number, speed: number):
 
 /** Arms holding a box in front at hip height (carry posture), degrees. */
 export function carryArms(): Partial<Record<JointId, number>> {
-  // upper arms close to vertical, forearms forward: the box is held close to the body, which
-  // keeps the shoulder moment arm (and the COM shift) small
+  // upper arms close to vertical, elbows bent past 90°: the box is held against the body, which
+  // keeps the shoulder and elbow moment arms (and the COM shift) small
   return {
-    L_shoulder_pitch: 10,
-    R_shoulder_pitch: 10,
-    L_shoulder_roll: 8,
-    R_shoulder_roll: 8,
-    L_arm_yaw: -4,
-    R_arm_yaw: -4,
-    L_elbow: 84,
-    R_elbow: 84,
+    L_shoulder_pitch: 2,
+    R_shoulder_pitch: 2,
+    L_shoulder_roll: 6,
+    R_shoulder_roll: 6,
+    L_arm_yaw: 2,
+    R_arm_yaw: 2,
+    L_elbow: 96,
+    R_elbow: 96,
     L_wrist_yaw: 0,
     R_wrist_yaw: 0,
-    L_wrist_pitch: -6,
-    R_wrist_pitch: -6,
+    L_wrist_pitch: -10,
+    R_wrist_pitch: -10,
   };
 }
 

@@ -29,7 +29,7 @@ const ORBIT = { el: [-0.15, 0.95] as [number, number], dist: [0.55, 1.7] as [num
 
 export const SCENES: Record<string, SceneDef> = {
   intro: {
-    shot: () => ({ id: 'intro', target: V(0, 0.98, 0), az: 0.62, el: 0.05, dist: 4.6, fov: 27, ox: -0.17, drift: 0.022, sway: 0.03, orbit: false }),
+    shot: () => ({ id: 'intro', target: V(0, 0.98, 0), az: 0.62, el: 0.05, dist: 4.6, fov: 27, ox: -0.2, drift: 0.022, sway: 0.03, orbit: false }),
     channels: { intro: 1 },
     pose: 'idle',
     idle: 'hero',
@@ -64,7 +64,7 @@ export const SCENES: Record<string, SceneDef> = {
     focus: [],
   },
   'explore.hands': {
-    shot: (w) => ({ id: 'hands', target: () => w.anchor('palmL'), az: 0.35, el: 0.28, dist: 0.72, fov: 30, orbit: { el: [-0.1, 0.9], dist: [0.6, 1.6] } }),
+    shot: (w) => ({ id: 'hands', target: () => w.anchor('palmL').add(V(-0.02, 0.02, 0)), az: 0.95, el: 0.2, dist: 0.7, fov: 30, ox: 0.08, orbit: { el: [-0.1, 0.9], dist: [0.45, 1.6] } }),
     channels: { labels: 1, forces: 0.6 },
     pose: 'idle',
     idle: 'showHand',
@@ -173,13 +173,13 @@ export const SCENES: Record<string, SceneDef> = {
     gaze: 'ahead',
   },
   'sim.limits.torque': {
-    shot: (w) => ({ id: 'limTorque', target: () => w.rigTarget(), az: 0.72, el: 0.16, dist: 1.45, fov: 30, orbit: { el: [-0.1, 0.9], dist: [0.6, 1.8] } }),
+    shot: (w) => ({ id: 'limTorque', target: () => w.rigTarget(), az: 0.95, el: 0.18, dist: 2.1, fov: 30, ox: 0.1, orbit: { el: [-0.1, 0.9], dist: [0.8, 2.6] } }),
     channels: { rigLight: 1 },
     pose: 'idle',
     idle: 'rest',
   },
   'sim.limits.current': {
-    shot: (w) => ({ id: 'limCurrent', target: () => w.rigTarget(), az: 0.9, el: 0.14, dist: 1.5, fov: 30, orbit: { el: [-0.1, 0.9], dist: [0.6, 1.8] } }),
+    shot: (w) => ({ id: 'limCurrent', target: () => w.rigTarget(), az: 0.8, el: 0.16, dist: 2.1, fov: 30, ox: 0.1, orbit: { el: [-0.1, 0.9], dist: [0.8, 2.6] } }),
     channels: { rigLight: 1 },
     pose: 'idle',
     idle: 'rest',
@@ -195,7 +195,7 @@ export const SCENES: Record<string, SceneDef> = {
     pose: 'reach',
   },
   'sim.limits.grip': {
-    shot: () => ({ id: 'limGrip', target: V(-0.2, 1.0, 0.36), az: -1.0, el: 0.22, dist: 1.55, fov: 30, ox: 0.1, orbit: ORBIT }),
+    shot: () => ({ id: 'limGrip', target: V(-0.18, 1.0, 0.34), az: -1.05, el: 0.2, dist: 2.0, fov: 30, ox: 0.1, orbit: ORBIT }),
     channels: { cart: 1, forces: 0.8 },
     pose: 'manip',
   },

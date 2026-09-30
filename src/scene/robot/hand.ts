@@ -99,7 +99,8 @@ export function buildHand(rig: RobotRig, side: Side) {
       parent = g;
     }
     joints.push({ g: chain, finger: f });
-    if (f === 0) rig.anchor(`fingertip${side}`, H, [-s * 0.01, -0.099 - lens.reduce((a, b) => a + b, 0), fingerZ[0]]);
+    // the index fingertip's pad, on the distal phalanx (it follows the finger as it curls)
+    if (f === 0) rig.anchor(`fingertip${side}`, H, [-s * 0.009, -lens[lens.length - 1] * 0.6, 0], chain[chain.length - 1]);
   }
   // thumb: two segments on a base that swings in front of the palm and across it
   const tb = new Group();

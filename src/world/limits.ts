@@ -20,7 +20,7 @@ export const LIMITS: LimitInfo[] = [
   { id: 'payload', title: 'Excess payload', code: 'KNEE ACTUATOR LIMIT', what: 'A 30 kg box, 50 % over the rated payload.' },
   { id: 'thermal', title: 'Overheating', code: 'THERMAL DERATING', what: 'Repeated squats with 20 kg, time sped up 40×.' },
   { id: 'battery', title: 'Low battery', code: 'LOW BATTERY', what: 'Fast walking at 8 % charge.' },
-  { id: 'torque', title: 'Torque saturation', code: 'TORQUE SATURATION', what: 'A 9:1 reducer asked to hold 20 kg with the leg straight.' },
+  { id: 'torque', title: 'Torque saturation', code: 'TORQUE SATURATION', what: 'An 8:1 reducer asked to lift 20 kg to a straight leg.' },
   { id: 'current', title: 'Excess current', code: 'CURRENT LIMIT', what: 'A fast lift of 20 kg: the move asks for more current than the drive gives.' },
   { id: 'contact', title: 'Loss of contact', code: 'BALANCE LOST', what: 'A 650 N shove: no step can catch it.' },
   { id: 'reach', title: 'Unreachable target', code: 'IK UNREACHABLE', what: 'A point 95 cm in front of the chest.' },
@@ -62,9 +62,7 @@ export class Limits {
         lab.set({ gait: 'fast', walking: true, carry: false });
         break;
       case 'torque':
-        lab.set({ jointRatio: 9, jointReducer: 'planetary', jointPayload: 20, jointSpeed: 120, jointTarget: 90 });
-        w.props.rig.rig.moveTo(90);
-        lab.set({ jointTarget: 0 });
+        lab.set({ jointRatio: 8, jointReducer: 'planetary', jointPayload: 20, jointSpeed: 30, jointTarget: 90 });
         break;
       case 'current':
         lab.set({ jointRatio: 30, jointReducer: 'cycloidal', jointPayload: 20, jointSpeed: 600, jointTarget: 100 });
@@ -90,6 +88,12 @@ export class Limits {
 
   /** Scenario-specific follow-ups that need the robot to have got somewhere first. */
   update() {
+    if (this.active === 'torque') {
+      // from hanging, try to straighten the leg
+      const rig = this.w.props.rig.rig;
+      const lab = useLab.getState();
+      if (lab.jointTarget === 90 && Math.abs(rig.q - Math.PI / 2) < 0.02 && Math.abs(rig.qd) < 0.05) lab.set({ jointTarget: 0 });
+    }
     if (this.active === 'current') {
       const rig = this.w.props.rig.rig;
       // once at the bottom, command the fast lift

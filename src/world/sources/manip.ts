@@ -15,7 +15,7 @@ import { GraspSim, OBJECTS } from '../../engine/grasp';
 import { solveArm } from '../../engine/ik';
 import type { RobotModel } from '../../engine/robot';
 import { DEG, Kinematics, Pose } from '../../engine/skeleton';
-import { flatFoot, solvePosture } from '../../engine/wholebody';
+import { flatFoot, solvePosture, standHeight } from '../../engine/wholebody';
 import { handPoses } from '../../scene/robot/hand';
 import { CART, ITEMS, SHELF_SPOT, type ItemId } from '../cart';
 import type { FootPose, Held, PoseSource } from '../pose';
@@ -67,7 +67,7 @@ export class ManipSource implements PoseSource {
     kin: Kinematics,
   ) {
     this.kin = kin;
-    this.stand = DIM.ankleHeight + (DIM.thigh + DIM.shin) * Math.cos(12 * DEG) - 0.004;
+    this.stand = standHeight(kin);
     this.feet = { L: flatFoot(DIM.hipHalfWidth, 0), R: flatFoot(-DIM.hipHalfWidth, 0) };
     this.objects = Object.fromEntries(Object.values(ITEMS).map((i) => [i.id, i.rest.clone()])) as Record<ItemId, Vector3>;
     this.sim = this.makeSim();
@@ -163,6 +163,7 @@ export class ManipSource implements PoseSource {
   }
 
   update(dt: number) {
+    this.stand = standHeight(this.kin);
     this.t += dt;
     this.st += dt;
     const model = this.model();

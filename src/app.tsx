@@ -6,7 +6,7 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BODY_DOF } from './spec/body';
-import { useApp } from './state/store';
+import { syncAddress, useApp } from './state/store';
 import './styles/app.css';
 import { Header } from './ui/Header';
 import { Intro } from './ui/Intro';
@@ -92,6 +92,7 @@ function App() {
 }
 
 export function mount(el: HTMLElement) {
+  syncAddress();
   createRoot(el).render(
     <StrictMode>
       <App />

@@ -76,7 +76,8 @@ export class ActuatorAssembly {
   bearingBalls!: Group;
   L: number;
   R: number;
-  N = 31;
+  /** Ring pins: one more than the reduction ratio (N − 1 lobes on each disc). */
+  N: number;
   /** Scale of the exploded spacing (keeps the whole stack in a close shot). */
   spread = 0.78;
   ecc: number;
@@ -88,12 +89,16 @@ export class ActuatorAssembly {
     const L = fam.housingLength;
     this.L = L;
     this.R = R;
+    this.N = Math.round(fam.reducer.ratio) + 1;
     const rotorR = R * 0.52;
     const statorIn = rotorR + 0.0012;
     const statorOut = R * 0.86;
     const ringPinR = R * 0.7;
-    const pinR = Math.max(0.0018, R * 0.042);
-    const ecc = Math.max(0.0008, R * 0.018);
+    const N = this.N;
+    // pins no fatter than a third of their spacing; eccentricity small enough for a valid
+    // (non-looping) disc profile: e·N < pin-circle radius
+    const pinR = Math.min(Math.max(0.0018, R * 0.042), ((2 * Math.PI * ringPinR) / N) * 0.3);
+    const ecc = Math.min(Math.max(0.0008, R * 0.018), (ringPinR / N) * 0.7);
     this.ecc = ecc;
 
     const add = (id: string, label: string, role: string, facts: string[], explode: number, delay: number, anchor: [number, number, number], build: (g: Group) => void) => {
@@ -214,7 +219,7 @@ export class ActuatorAssembly {
     const holes = 8;
     const holeR = R * 0.39;
     for (const k of [0, 1]) {
-      const disc = add(k === 0 ? 'disc' : 'disc2', k === 0 ? 'Cycloidal discs' : 'Second cycloidal disc', 'Each disc has 30 lobes rolling inside 31 ring pins. Driven round by the eccentric, a disc turns backwards by one lobe per motor turn: a 30 : 1 reduction in one compact stage, with many lobes sharing the load.', ['Ratio N = (pins − 1) = 30', 'Two discs 180° apart cancel the wobble', 'Hardened steel, rolling contact: ~88 % efficient'], k === 0 ? -0.24 : -0.21, k === 0 ? 0.21 : 0.24, [ringPinR, housingTop + 0.006, 0], (g) => {
+      const disc = add(k === 0 ? 'disc' : 'disc2', k === 0 ? 'Cycloidal discs' : 'Second cycloidal disc', `Each disc has ${N - 1} lobes rolling inside ${N} ring pins. Driven round by the eccentric, a disc turns backwards by one lobe per motor turn: a ${N - 1} : 1 reduction in one compact stage, with many lobes sharing the load.`, [`Ratio = pins − 1 = ${N - 1}`, 'Two discs 180° apart cancel the wobble', `Hardened steel, rolling contact: ~${Math.round(fam.reducer.efficiency * 100)} % efficient`], k === 0 ? -0.24 : -0.21, k === 0 ? 0.21 : 0.24, [ringPinR, housingTop + 0.006, 0], (g) => {
         const sh = new Shape(discOutline);
         for (let i = 0; i < holes; i++) {
           const a = (i / holes) * Math.PI * 2;
@@ -231,7 +236,7 @@ export class ActuatorAssembly {
       this.discs.push(disc);
     }
     // 9. ring-pin housing (the reducer half of the housing)
-    add('ring', 'Ring-pin housing', 'The fixed ring of 31 hardened pins the discs roll against: it takes the reaction torque into the housing.', ['31 pins on the pin circle', 'Forms the front half of the housing'], -0.17, 0.27, [R, housingTop + 0.008, 0], (g) => {
+    add('ring', 'Ring-pin housing', `The fixed ring of ${N} hardened pins the discs roll against: it takes the reaction torque into the housing.`, [`${N} pins on the pin circle`, 'Forms the front half of the housing'], -0.17, 0.27, [R, housingTop + 0.008, 0], (g) => {
       const top = L * 0.9;
       const p = Profile.from(ringPinR + pinR * 0.6, housingTop).to(R, housingTop).groove(R, L * 0.74, 0.0012, 0.0016).to(R, top - 0.003).chamfer(0.0015).to(R * 0.93, top).to(ringPinR + pinR * 0.6, top).to(ringPinR + pinR * 0.6, housingTop);
       g.add(mesh(p.build(56), 'alu'));

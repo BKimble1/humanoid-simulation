@@ -45,6 +45,7 @@ export class PayloadProp {
   private stand = new Group();
   private alpha = 0;
   private rise = 0;
+  private liftAlpha = 0;
   private size = new Vector3(0.3, 0.2, 0.26);
 
   constructor() {
@@ -105,8 +106,13 @@ export class PayloadProp {
     // the balance lab's lift box and its platform
     const b = w.balance;
     const inLab = w.sceneId === 'sim.balance' && w.driver.source === b;
-    const wantStand = inLab && (b.task === 'lift' || b.liftProgress > 0) ? 1 : b.liftProgress > 0 ? 1 : 0;
+    const holding = b.liftProgress >= 0.5;
+    const wantStand = inLab && (b.task === 'lift' || b.liftProgress > 0) ? 1 : 0;
     this.rise += Math.sign(wantStand - this.rise) * Math.min(Math.abs(wantStand - this.rise), dt / 1.4);
+    // a box still in the hands when the visitor leaves fades out (and is back on the platform)
+    const boxWant = inLab || (!holding && this.rise > 0.001) ? 1 : 0;
+    this.liftAlpha += Math.sign(boxWant - this.liftAlpha) * Math.min(Math.abs(boxWant - this.liftAlpha), dt / 0.45);
+    if (!inLab && holding && this.liftAlpha <= 0) b.dropLift();
     const e = this.rise * this.rise * (3 - 2 * this.rise);
     const topY = LIFT_BOX.rest.y - LIFT_BOX.size.y / 2;
     const y = e * topY;
@@ -118,13 +124,17 @@ export class PayloadProp {
     col.scale.y = Math.max(0.001, y - 0.03);
     col.position.y = (y - 0.03) / 2;
     const lb = this.liftBox.g;
-    lb.visible = this.rise > 0.001 || b.liftProgress > 0;
-    if (b.liftProgress >= 0.5 && w.driver.source === b) lb.position.copy(b.box);
+    lb.visible = this.liftAlpha > 0.01 && (this.rise > 0.001 || holding);
+    for (const m of this.liftBox.mats) {
+      m.opacity = this.liftAlpha;
+      m.depthWrite = this.liftAlpha > 0.98 && m.map === null;
+    }
+    if (holding) lb.position.copy(b.box);
     else lb.position.set(LIFT_BOX.rest.x, y + LIFT_BOX.size.y / 2, LIFT_BOX.rest.z);
-    if (b.liftProgress >= 0.5) {
+    if (holding) {
       const pl = w.kin.palm('L');
       const pr = w.kin.palm('R');
-      lb.rotation.set(0, Math.atan2(-(pl.z - pr.z), pl.x - pr.x), 0);
+      if (w.driver.source === b) lb.rotation.set(0, Math.atan2(-(pl.z - pr.z), pl.x - pr.x), 0);
     } else lb.rotation.set(0, 0, 0);
   }
 }

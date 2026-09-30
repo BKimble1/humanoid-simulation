@@ -99,6 +99,12 @@ export class BalanceSource implements PoseSource {
     this.feet = this.footTargets(0);
   }
 
+  /** Leaving with the box in the hands: the props fade it out; the timeline resets here. */
+  dropLift() {
+    this.lift = 0;
+    this.box.copy(LIFT_BOX.rest);
+  }
+
   enter(from: Pose) {
     this.kin.update(from);
     this.phase = 'task';
@@ -121,8 +127,11 @@ export class BalanceSource implements PoseSource {
     this.pending = { force: forceN, dir };
   }
 
+  /** Extra condition for a push to land (the world: nothing in front of the robot). */
+  pushGate: () => boolean = () => true;
+
   private settled(): boolean {
-    return this.task === 'stand' && this.lift === 0 && Math.abs(this.h.x - this.stand) < 0.004 && Math.abs(this.h.v) < 0.01 && Math.abs(this.comX.x) < 0.004 && this.footR.x < 0.002 && Math.abs(this.pitch.x - 1.5 * DEG) < 0.01;
+    return this.pushGate() && this.task === 'stand' && this.lift === 0 && Math.abs(this.h.x - this.stand) < 0.004 && Math.abs(this.h.v) < 0.01 && Math.abs(this.comX.x) < 0.004 && this.footR.x < 0.002 && Math.abs(this.pitch.x - 1.5 * DEG) < 0.01;
   }
 
   /** Apply a push to the torso: force (N) in the ground plane, lasting `duration` s. */

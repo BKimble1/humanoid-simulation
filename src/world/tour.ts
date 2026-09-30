@@ -5,8 +5,20 @@
  * page and can be recorded frame by frame), and every transition is the world's own
  * scene transition: interrupting the tour anywhere leaves a consistent state.
  */
+import { ACTUATORS } from '../spec/actuators';
+import { BODY_DOF, DIM, HAND } from '../spec/body';
+import { HEAD_CAMERAS } from '../spec/sensing';
+import { configureActuator, ratings } from '../engine/actuator';
+import { packSpec } from '../engine/battery';
+import { RobotModel } from '../engine/robot';
 import type { LabParams } from '../state/store';
 import type { World } from '../world/world';
+
+// the numbers in the captions come from the specification, like everywhere else
+const pack = packSpec();
+const mass = new RobotModel().robotMass;
+const a100 = ratings(configureActuator(ACTUATORS.A100, pack.nominalV));
+const kneeRatio = ACTUATORS.A100.reducer.ratio;
 
 export interface Chapter {
   id: string;
@@ -29,7 +41,7 @@ export const TOUR: Chapter[] = [
     title: 'FO-H1',
     scene: 'intro',
     duration: 13,
-    caption: 'An original humanoid, designed for this simulation: 1.75 m tall, 66 kg, 29 actuated joints and two six-motor hands. Every number you will see is calculated from its design.',
+    caption: `An original humanoid, designed for this simulation: ${DIM.height.toFixed(2)} m tall, ${mass.toFixed(0)} kg, ${BODY_DOF} actuated joints and two ${HAND.actuated}-motor hands. Every number you will see is calculated from its design.`,
   },
   {
     id: 'structure',
@@ -44,7 +56,7 @@ export const TOUR: Chapter[] = [
     scene: 'explore.actuators',
     actuator: 'knee',
     duration: 11,
-    caption: 'The knee motor sits high on the thigh and drives the joint through a push rod, keeping mass near the hip. Hips and knees share one actuator design: 260 Nm peak.',
+    caption: `The knee motor sits high on the thigh and drives the joint through a push rod, keeping mass near the hip. Hips and knees share one actuator design: ${a100.peakTorque.toFixed(0)} Nm peak.`,
   },
   {
     id: 'inside',
@@ -52,14 +64,14 @@ export const TOUR: Chapter[] = [
     scene: 'explore.actuators.open',
     actuator: 'knee',
     duration: 22,
-    caption: 'A frameless motor, a 30 : 1 cycloidal reducer, crossed-roller bearing, two encoders, a torque sensor and its own drive. It is running one stride of walking now: watch current and torque follow the gait.',
+    caption: `A frameless motor, a ${kneeRatio} : 1 cycloidal reducer, crossed-roller bearing, two encoders, a torque sensor and its own drive. It is running one stride of walking now: watch current and torque follow the gait.`,
   },
   {
     id: 'power',
     title: 'Power',
     scene: 'explore.power',
     duration: 14,
-    caption: 'A 1.1 kWh pack of 126 cells at 50 V. The bus runs through contactors to every drive; the dashes move faster where a limb draws more power.',
+    caption: `A ${(pack.energyWh / 1000).toFixed(1)} kWh pack of ${pack.cells} cells at ${pack.nominalV.toFixed(0)} V. The bus runs through contactors to every drive; the dashes move faster where a limb draws more power.`,
   },
   {
     id: 'compute',
@@ -73,7 +85,7 @@ export const TOUR: Chapter[] = [
     title: 'Vision',
     scene: 'explore.vision',
     duration: 13,
-    caption: 'Two cameras 8 cm apart measure depth by disparity. The error grows with the square of distance: about a millimetre at arm’s length, centimetres across the room.',
+    caption: `Two cameras ${(HEAD_CAMERAS.stereo.baseline * 100).toFixed(0)} cm apart measure depth by disparity. The error grows with the square of distance: about a millimetre at arm’s length, centimetres across the room.`,
   },
   {
     id: 'grip',
@@ -117,7 +129,7 @@ export const TOUR: Chapter[] = [
     title: 'Limits',
     scene: 'engineer',
     duration: 17,
-    caption: 'Now ask too much: a 30 kg box. The analysis reruns six tasks through the inverse dynamics — and the knees cannot step up with it. The limit is reported with what would fix it.',
+    caption: 'Now ask too much: a 30 kg box, half again the rated load. Six tasks rerun through the inverse dynamics and the thermal models: the arms would overheat holding it and the ankles run out of torque walking with it. Each limit comes with what would fix it.',
     start: (w) => w.tour.setConfig({ payload: 30 }),
   },
   {

@@ -16,7 +16,7 @@ import { ACTUATORS } from '../spec/actuators';
 import { GAITS } from '../spec/motion';
 import { BodyEnergy } from '../engine/power';
 import { RobotModel, memberReport } from '../engine/robot';
-import { Kinematics, Pose, restPose } from '../engine/skeleton';
+import { Kinematics, Pose, restPose, segmentScale, type LimbScale } from '../engine/skeleton';
 import { ActuatorAssembly } from '../scene/actuator/assembly';
 import { Director } from '../scene/camera/director';
 import { Lab } from '../scene/lab/lab';
@@ -41,12 +41,13 @@ import { Openings } from './features/openings';
 import { Flows } from './features/flows';
 import { Look } from './features/look';
 import { Vision } from './features/vision';
+import { Sound } from './features/sound';
 import { Props } from './features/props';
 import { RIG_PIVOT } from './props/rig';
 import { Limits } from './limits';
 import { TourRunner } from './tourRunner';
 import { publishReadouts } from './readouts';
-import { Mesh, Group, Matrix4, Quaternion } from 'three';
+import { Mesh, Group, Matrix4, Quaternion, type Object3D } from 'three';
 
 export interface Feature {
   update(w: World, dt: number): void;
@@ -88,6 +89,7 @@ export class World {
   flows = new Flows();
   look = new Look();
   vision = new Vision();
+  sound = new Sound();
   props = new Props();
   limits: Limits;
   tour: TourRunner;
@@ -115,17 +117,19 @@ export class World {
     this.director = new Director(this.stage.camera);
     const cfg = useApp.getState().config;
     this.model = new RobotModel(cfg);
-    this.kin = new Kinematics(cfg.scale);
+    this.kin = this.newKin(cfg.scale);
     this.energy = new BodyEnergy(this.model);
     this.driver = new PoseDriver(cfg.scale);
-    this.idle = new IdleSource(() => this.model, new Kinematics(cfg.scale));
-    this.walk = new WalkSource(() => this.model, new Kinematics(cfg.scale), () => this.energy);
-    this.balance = new BalanceSource(() => this.model, new Kinematics(cfg.scale));
-    this.exercise = new BalanceSource(() => this.model, new Kinematics(cfg.scale));
+    this.idle = new IdleSource(() => this.model, this.newKin(cfg.scale));
+    this.walk = new WalkSource(() => this.model, this.newKin(cfg.scale), () => this.energy);
+    this.balance = new BalanceSource(() => this.model, this.newKin(cfg.scale));
+    this.exercise = new BalanceSource(() => this.model, this.newKin(cfg.scale));
     this.exercise.exercise = true;
     this.exercise.id = 'exercise';
-    this.reach = new ReachSource(() => this.model, new Kinematics(cfg.scale));
-    this.manip = new ManipSource(() => this.model, new Kinematics(cfg.scale));
+    // a push only lands with the floor in front of the robot clear
+    this.balance.pushGate = () => this.props.cart.dock < 0.01;
+    this.reach = new ReachSource(() => this.model, this.newKin(cfg.scale));
+    this.manip = new ManipSource(() => this.model, this.newKin(cfg.scale));
     this.sources = { idle: this.idle, walk: this.walk, balance: this.balance, exercise: this.exercise, reach: this.reach, manip: this.manip };
     this.overlays = new Overlays(this.body);
     this.limits = new Limits(this);
@@ -135,7 +139,11 @@ export class World {
     this.lab.group.name = 'lab';
     this.stage.scene.add(this.flows.group, this.props.group, this.vision.frustum);
     this.props.ik.attach(this, canvas);
-    this.features.push(this.body, this.actuatorLive, this.look, this.props, this.overlays, this.flows, this.vision, this.labels);
+    this.features.push(this.body, this.actuatorLive, this.look, this.props, this.overlays, this.flows, this.vision, this.labels, this.sound);
+    // reduced motion: camera moves become short cross-moves
+    const rm = typeof matchMedia !== 'undefined' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+    this.director.reducedMotion = !!rm?.matches;
+    rm?.addEventListener?.('change', (e) => (this.director.reducedMotion = e.matches));
     this.unsub.push(this.director.attach(canvas));
     this.stage.onResize = (w, h) => {
       this.director.viewW = w;
@@ -163,7 +171,7 @@ export class World {
     this.driver.use(this.idle, 0.01);
     this.driver.update(1 / 60);
     this.rig.apply(this.driver.out);
-    this.applyScene('intro', true);
+    this.applyScene(this.sceneFor(useApp.getState()), true);
     progress(0.6);
     await frame();
     this.buildAssemblies();
@@ -272,10 +280,34 @@ export class World {
     }
   }
 
+  /** Every kinematics instance (the world's and the pose sources'): limb lengths change them all. */
+  private kins: Kinematics[] = [];
+  private newKin(scale: LimbScale): Kinematics {
+    const k = new Kinematics(scale);
+    this.kins.push(k);
+    return k;
+  }
+
   private applyConfig() {
     const cfg = useApp.getState().config;
+    const prev = this.model.config.scale;
     this.model = new RobotModel(cfg);
     this.energy.setModel(this.model);
+    const s = cfg.scale;
+    if (s.thigh !== prev.thigh || s.shin !== prev.shin || s.upperArm !== prev.upperArm || s.forearm !== prev.forearm) this.applyScale(s);
+  }
+
+  /** New limb lengths: the joints move, the limbs' parts stretch along them. */
+  private applyScale(s: LimbScale) {
+    for (const k of this.kins) k.setScale(s);
+    this.driver.scale = { ...s };
+    this.rig.setScale(s);
+    const segs = new Set<Object3D>(this.rig.seg.values());
+    for (const [id, g] of this.rig.seg) {
+      const f = segmentScale(id, s);
+      for (const c of g.children) if (!segs.has(c)) c.scale.y = f;
+    }
+    this.walk.enter(this.driver.out);
   }
 
   // ─────────────────────────── queries used by shots and features ───────────────────────────
@@ -318,7 +350,13 @@ export class World {
 
   // ─────────────────────────── covers, isolation, highlight ───────────────────────────
 
+  /** Markings on covers, by the cover mesh's name: they fade with it. */
+  private decals = new Map<string, Mesh>();
+
   private prepareCovers() {
+    this.rig.root.traverse((o) => {
+      if (o.name.startsWith('marking:')) this.decals.set(o.name.slice(8), o as Mesh);
+    });
     this.covers = this.rig.meshes.map((rm) => {
       const ghost = new Mesh(rm.mesh.geometry, rm.ghost);
       ghost.visible = false;
@@ -363,6 +401,11 @@ export class World {
         rm.fade.depthWrite = g < 0.5;
       }
       c.ghost.visible = g > 0.002;
+      const decal = this.decals.get(rm.mesh.name);
+      if (decal) {
+        (decal.material as import('three').MeshPhysicalMaterial).opacity = Math.max(0, 1 - g * 1.6);
+        decal.visible = g < 0.6 && rm.mesh.visible;
+      }
       (c.ghost.material as import('three').ShaderMaterial).uniforms.uOpacity.value = g * ghostK;
       // highlight (hover)
       const h = this.highlight.get(rm.sub) ?? 0;

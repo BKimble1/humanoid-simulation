@@ -17,6 +17,9 @@ import type { BufferGeometry as BG } from 'three';
 
 export const RIG_PIVOT = new Vector3(3.15, 0.98, 0.12);
 
+/** Scenes in which the test stand runs. */
+export const RIG_SCENES = new Set(['sim.joint', 'sim.limits.torque', 'sim.limits.current']);
+
 function mesh(g: BG, look: LookName, shadow = true): Mesh {
   const m = new Mesh(g, material(look));
   m.castShadow = shadow;
@@ -108,7 +111,7 @@ export class RigProp {
   }
 
   update(w: World, dt: number) {
-    const on = w.sceneId === 'sim.joint' ? 1 : 0;
+    const on = RIG_SCENES.has(w.sceneId) ? 1 : 0;
     this.active += (on - this.active) * Math.min(1, dt * 2);
     const l = useLab.getState();
     const s = this.rig.s;

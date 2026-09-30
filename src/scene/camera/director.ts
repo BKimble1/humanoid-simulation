@@ -106,6 +106,19 @@ export class Director {
   private lensX(s: Shot): number {
     return this.compact ? 0 : (s.ox ?? 0);
   }
+
+  /** Vertical lens shift: on phones the panel is a bottom sheet, so the subject sits higher and
+   * a little further away. */
+  private lensY(s: Shot): number {
+    return this.compact ? (s.oy ?? 0) - (this.viewH > this.viewW ? 0.12 : 0.05) : (s.oy ?? 0);
+  }
+
+  private distOf(s: Shot): number {
+    if (!this.compact) return s.dist;
+    // portrait: the whole robot has to fit above the sheet
+    const portrait = this.viewH > this.viewW;
+    return s.dist * (portrait ? (s.dist > 2.2 ? 1.72 : 1.35) : 1.12);
+  }
   ceiling = 4.2;
   private dragging = false;
 
@@ -146,7 +159,7 @@ export class Director {
 
   private snapToShot() {
     const s = this.shot!;
-    this.cur = { target: this.targetOf(s).clone(), az: s.az, el: s.el, dist: s.dist, fov: s.fov ?? 30, ox: s.ox ?? 0, oy: s.oy ?? 0 };
+    this.cur = { target: this.targetOf(s).clone(), az: s.az, el: s.el, dist: this.distOf(s), fov: s.fov ?? 30, ox: this.lensX(s), oy: this.lensY(s) };
   }
 
   /** The state including the visitor's orbit offsets. */
@@ -169,10 +182,10 @@ export class Director {
       const azDest = f.az + wrap(s.az - f.az);
       this.cur.az = quintic(f.az, v.az * T, azDest, u);
       this.cur.el = quintic(f.el, v.el * T, s.el, u);
-      this.cur.dist = Math.exp(quintic(Math.log(f.dist), (v.dist / Math.max(0.05, f.dist)) * T, Math.log(s.dist), u));
+      this.cur.dist = Math.exp(quintic(Math.log(f.dist), (v.dist / Math.max(0.05, f.dist)) * T, Math.log(this.distOf(s)), u));
       this.cur.fov = quintic(f.fov, v.fov * T, s.fov ?? 30, u);
       this.cur.ox = quintic(f.ox, v.ox * T, this.lensX(s), u);
-      this.cur.oy = quintic(f.oy, v.oy * T, s.oy ?? 0, u);
+      this.cur.oy = quintic(f.oy, v.oy * T, this.lensY(s), u);
       this.cur.target.set(quintic(f.target.x, v.t.x * T, dest.x, u), quintic(f.target.y, v.t.y * T, dest.y, u), quintic(f.target.z, v.t.z * T, dest.z, u));
       if (u >= 1) {
         this.moving = false;
@@ -187,10 +200,10 @@ export class Director {
       else this.cur.az = s.az + (this.cur.az - s.az) * Math.exp(-dt * 2);
       const sway = s.sway ? s.sway * Math.sin(this.driftPhase * 0.21) * Math.min(1, this.driftPhase / 4) : 0;
       this.cur.el = s.el + sway;
-      this.cur.dist = s.dist;
+      this.cur.dist += (this.distOf(s) - this.cur.dist) * Math.min(1, dt * 3);
       this.cur.fov = s.fov ?? 30;
       this.cur.ox += (this.lensX(s) - this.cur.ox) * Math.min(1, dt * 3);
-      this.cur.oy = s.oy ?? 0;
+      this.cur.oy += (this.lensY(s) - this.cur.oy) * Math.min(1, dt * 3);
     }
     // visitor orbit inertia
     if (!this.dragging) {

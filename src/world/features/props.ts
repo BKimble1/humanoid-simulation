@@ -6,7 +6,7 @@ import { Group } from 'three';
 import { CartProp } from '../props/cart';
 import { IkProp } from '../props/ik';
 import { PayloadProp } from '../props/payload';
-import { RigProp } from '../props/rig';
+import { RIG_SCENES, RigProp } from '../props/rig';
 import type { Feature, World } from '../world';
 
 export class Props implements Feature {
@@ -29,7 +29,7 @@ export class Props implements Feature {
   }
 
   readouts(r: Record<string, number | string | boolean>, w: World) {
-    if (w.sceneId !== 'sim.joint') return;
+    if (!RIG_SCENES.has(w.sceneId)) return;
     const g = this.rig.rig;
     const deg = (v: number) => (v * 180) / Math.PI;
     r.jQ = deg(g.q);

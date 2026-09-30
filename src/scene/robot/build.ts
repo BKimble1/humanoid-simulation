@@ -7,6 +7,7 @@
  * inside warm light-grey molded covers with graphite secondary panels; black silicone contact
  * surfaces; a black glass sensor visor. Markings are few and small.
  */
+import { addMarkings } from './markings';
 import { BoxGeometry, CylinderGeometry, Matrix4, Quaternion, Vector3 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { ACTUATORS, type ActuatorFamily } from '../../spec/actuators';
@@ -238,7 +239,6 @@ function buildTorso(rig: RobotRig) {
   rig.add(S, 'cable', 'wiring', cable([new Vector3(0.03, 0.07, -0.065), new Vector3(0.035, 0.2, -0.066), new Vector3(0.03, 0.33, -0.06), new Vector3(0.012, 0.39, -0.04)], 0.007, 40, 8));
   rig.add(S, 'cable', 'wiring', cable([new Vector3(-0.03, 0.07, -0.065), new Vector3(-0.035, 0.2, -0.066), new Vector3(-0.07, 0.3, -0.05), new Vector3(-0.12, 0.33, -0.03)], 0.006, 40, 8));
   rig.add(S, 'cable', 'wiring', cable([new Vector3(0.035, 0.2, -0.066), new Vector3(0.07, 0.3, -0.05), new Vector3(0.12, 0.33, -0.03)], 0.006, 30, 8));
-  // markings: the designation on the backpack, the maker on the chest (small)
   rig.anchor('torso', S, [0, 0.22, 0.13]);
   rig.anchor('battery', S, [0, 0.16, 0.07]);
   rig.anchor('shoulderL', S, [shx, sh, -0.01]);
@@ -315,6 +315,7 @@ export function buildRobot(opts: BuildOptions): RobotRig {
     buildArm(rig, side, opts.scale);
   }
   rig.finalize();
+  addMarkings(rig);
   return rig;
 }
 

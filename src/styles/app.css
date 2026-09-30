@@ -969,7 +969,10 @@ a {
   display: grid;
   gap: 0;
   padding: 3px 0;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+  /* a tight halo as well as the soft one: labels stay readable over the white shell */
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.9),
+    0 1px 8px rgba(0, 0, 0, 0.85);
 }
 .lbl__title {
   font-size: 12.5px;
@@ -979,7 +982,7 @@ a {
 }
 .lbl__value {
   font-size: 11.5px;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 .lbl__value:empty {
   display: none;

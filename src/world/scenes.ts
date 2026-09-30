@@ -43,7 +43,7 @@ export const SCENES: Record<string, SceneDef> = {
     gaze: 'camera',
   },
   'explore.structure': {
-    shot: () => ({ id: 'structure', target: V(0, 0.98, 0), az: 0.78, el: 0.1, dist: 3.4, fov: 30, ox: 0.12, orbit: ORBIT }),
+    shot: () => ({ id: 'structure', target: V(0, 0.98, 0), az: 0.78, el: 0.1, dist: 3.6, fov: 30, ox: 0.12, orbit: ORBIT }),
     channels: { xray: 1, labels: 1, loads: 0 },
     pose: 'idle',
     idle: 'rest',
@@ -105,12 +105,12 @@ export const SCENES: Record<string, SceneDef> = {
     focus: ['compute', 'sensor', 'wiring'],
   },
   'explore.thermal': {
-    shot: () => ({ id: 'thermal', target: V(0, 0.9, 0), az: 0.55, el: 0.1, dist: 3.3, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'thermal', target: V(0, 0.88, 0), az: 0.55, el: 0.1, dist: 3.9, fov: 30, orbit: ORBIT }),
     channels: { thermal: 1, labels: 1 },
     pose: 'exercise',
   },
   engineer: {
-    shot: () => ({ id: 'engineer', target: V(0, 0.95, 0), az: 0.62, el: 0.12, dist: 3.6, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'engineer', target: V(0, 0.95, 0), az: 0.62, el: 0.12, dist: 3.8, fov: 30, orbit: ORBIT }),
     channels: { loads: 1, balanceViz: 0.8 },
     pose: 'idle',
     idle: 'rest',
@@ -156,13 +156,13 @@ export const SCENES: Record<string, SceneDef> = {
     gaze: 'ahead',
   },
   'sim.limits.payload': {
-    shot: () => ({ id: 'limPayload', target: V(0, 0.85, 0.05), az: 0.75, el: 0.1, dist: 3.1, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'limPayload', target: V(0, 0.9, 0.05), az: 0.75, el: 0.1, dist: 3.9, fov: 30, orbit: ORBIT }),
     channels: { loads: 1, balanceViz: 0.7 },
     pose: 'idle',
     idle: 'rest',
   },
   'sim.limits.thermal': {
-    shot: () => ({ id: 'limThermal', target: V(0, 0.8, 0), az: 0.55, el: 0.1, dist: 3.2, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'limThermal', target: V(0, 0.88, 0), az: 0.55, el: 0.1, dist: 3.9, fov: 30, orbit: ORBIT }),
     channels: { thermal: 1 },
     pose: 'exercise',
   },
@@ -185,7 +185,7 @@ export const SCENES: Record<string, SceneDef> = {
     idle: 'rest',
   },
   'sim.limits.contact': {
-    shot: () => ({ id: 'limContact', target: V(0, 0.75, 0.25), az: 1.25, el: 0.14, dist: 3.8, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'limContact', target: V(0, 0.86, 0.25), az: 1.25, el: 0.14, dist: 4.1, fov: 30, orbit: ORBIT }),
     channels: { balanceViz: 1, forces: 1 },
     pose: 'balance',
   },
@@ -200,7 +200,7 @@ export const SCENES: Record<string, SceneDef> = {
     pose: 'manip',
   },
   'sim.limits': {
-    shot: () => ({ id: 'limits', target: V(0, 0.9, 0), az: 0.6, el: 0.12, dist: 3.4, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'limits', target: V(0, 0.88, 0), az: 0.6, el: 0.12, dist: 3.9, fov: 30, orbit: ORBIT }),
     channels: { loads: 1, balanceViz: 0.8 },
     pose: 'idle',
     idle: 'rest',

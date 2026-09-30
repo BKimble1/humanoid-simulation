@@ -1,0 +1,36 @@
+{
+  "name": "fab-one-humanoid",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FAB / ONE Humanoid: an interactive engineering simulation and digital twin of FO-H1, an original adult-size electric humanoid robot.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource-variable/inter": "5.3.0",
+    "@react-three/fiber": "9.8.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "0.186.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.186.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}

@@ -210,3 +210,26 @@ test('with reduced motion, camera moves are short and scene changes quick', asyn
   expect(t.speed, 'channel changes about three times quicker').toBeLessThan(0.5);
   expect(errors).toEqual([]);
 });
+
+test('the first picture is already framed for the layout: no reframing jump after the page appears', async ({ page }) => {
+  const errors = watchErrors(page);
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(size);
+    // telemetry from the first frame the page presents after it is ready
+    await page.goto(`/?virt=1&quality=low&mode=explore&system=overview`.replace(/^\//, (process.env.SIM_PATH ?? '').replace(/\/+$/, '') + '/'));
+    await page.waitForFunction(() => {
+      const w = window as unknown as { __fabAdvance?: unknown; __fabStores?: { useApp: { getState: () => { ready: boolean } } } };
+      return !!w.__fabAdvance && !!w.__fabStores?.useApp.getState().ready;
+    }, undefined, { timeout: 180_000 });
+    await page.evaluate(() => (window as unknown as { __fabTelemetry: { start(): void } }).__fabTelemetry.start());
+    await advance(page, 45);
+    const t = await page.evaluate(() => (window as unknown as { __fabTelemetry: { samples: { i: number; cv: number; ca: number }[] } }).__fabTelemetry.samples);
+    const w = t.reduce((m, x) => (x.ca > m.ca ? x : m), t[0]);
+    expect(w.ca, `${size.width}×${size.height}: camera acceleration ${w.ca.toFixed(1)} m/s² at frame ${w.i}`).toBeLessThanOrEqual(15);
+    expect(Math.max(...t.map((x) => x.cv)), `${size.width}×${size.height}: the camera holds still`).toBeLessThan(1);
+  }
+  expect(errors).toEqual([]);
+});

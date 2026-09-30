@@ -687,6 +687,9 @@ export class World {
       if (off !== useApp.getState().offFraming) useApp.setState({ offFraming: off });
     }
     this.tour.update(pdt, dt);
+    // until the interface's layout is known, look for it every frame: the first framing then
+    // happens before the page is seen, not a moment after
+    if (!this.framedLayout) this.measureFree();
     this.kin.update(this.driver.out);
     this.proxies.update(this.kin);
     this.director.update(pdt, dt);

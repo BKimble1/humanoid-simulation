@@ -712,7 +712,11 @@ export class Director {
       this.cur.dist = this.distOf(this.shot);
       this.cur.ox = this.lensX(this.shot);
       this.cur.oy = this.lensY(this.shot);
-      this.apply(this.effective());
+      const eff = this.effective();
+      this.apply(eff);
+      // the snap is a new starting point, not a motion: the next move starts from rest here
+      this.prev = eff;
+      this.vel = { t: new Vector3(), az: 0, el: 0, dist: 0, fov: 0, ox: 0, oy: 0 };
     }
   }
 }

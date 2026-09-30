@@ -97,6 +97,8 @@ export class Director {
   keepOut: KeepOut[] = [];
   /** A transition is running. */
   moving = false;
+  /** Counts transitions started (telemetry: which move a frame belongs to). */
+  transitionId = 0;
   /** Time scale for reduced motion (transitions become short cross-moves). */
   reducedMotion = false;
   floor = 0.12;
@@ -137,6 +139,7 @@ export class Director {
   /** Start a shot from wherever the camera is, carrying its current motion. */
   go(shot: Shot, opts: { duration?: number; keepUser?: boolean; instant?: boolean } = {}) {
     const dest = this.targetOf(shot);
+    this.transitionId++;
     // include the visitor's offsets in the starting state, then clear them
     const start = this.effective();
     this.from = { target: start.target.clone(), az: start.az, el: start.el, dist: start.dist, fov: start.fov, ox: start.ox, oy: start.oy };

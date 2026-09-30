@@ -47,6 +47,8 @@ import { RIG_PIVOT } from './props/rig';
 import { Limits } from './limits';
 import { TourRunner } from './tourRunner';
 import { publishReadouts } from './readouts';
+import { Telemetry } from './telemetry';
+import { handPoses } from '../scene/robot/hand';
 import { Mesh, Group, Matrix4, Quaternion, type Object3D } from 'three';
 
 export interface Feature {
@@ -109,6 +111,8 @@ export class World {
   private highlight = new Map<VisualGroup, number>();
   readoutsAt = 0;
   onFrame: ((w: World, dt: number) => void)[] = [];
+  /** Developer telemetry (tests and probes only). */
+  telemetry = new Telemetry();
 
   constructor(canvas: HTMLCanvasElement) {
     this.stage = new Stage(canvas);
@@ -187,6 +191,7 @@ export class World {
       const w = window as unknown as Record<string, unknown>;
       w.__fab = this;
       w.__fabStores = { useApp, useLab };
+      w.__fabTelemetry = this.telemetry;
       // advance n frames; with render=false only the last frame is drawn (fast recording)
       w.__fabAdvance = (n = 1, render = true) => {
         for (let i = 0; i < n; i++) this.step(tickVirtual(), render || i === n - 1);
@@ -506,6 +511,7 @@ export class World {
     }
     this.tour.update(dt);
     this.director.update(dt);
+    this.telemetry.record(this, dt);
     if (render) {
       this.stage.render(dt);
       this.vision.renderInto(this);
@@ -514,6 +520,41 @@ export class World {
 
   resize(w: number, h: number) {
     this.stage.resize(w, h);
+  }
+
+  // ─────────────────────────── telemetry accessors ───────────────────────────
+
+  /** The displayed hand pose as numbers (both hands: four fingers, thumb flexion, opposition, spread). */
+  displayedHandScalars(): number[] {
+    const o: number[] = [];
+    for (const s of ['L', 'R'] as const) {
+      const h = handPoses[s];
+      o.push(...h.fingers, h.thumbFlex, h.thumbOpp, h.spread);
+    }
+    return o;
+  }
+
+  /** Movable objects the visitor sees, by name (world positions). */
+  trackedObjects(): [string, Vector3][] {
+    const o: [string, Vector3][] = Object.entries(this.manip.objects);
+    o.push(['liftBox', this.balance.box]);
+    return o;
+  }
+
+  /** Distance from a held cart object to where the displayed hand holds it (m; -1: nothing held). */
+  holdAttachmentError(): number {
+    if (this.driver.source !== this.manip || !this.manip.held) return -1;
+    const exp = this.manip.expectedCentre(this.kin);
+    return exp ? exp.distanceTo(this.manip.objects[this.manip.item.id]) : -1;
+  }
+
+  visibleAssemblies(): string[] {
+    return (Object.keys(this.assemblies) as ('knee' | 'hip' | 'elbow')[]).filter((k) => this.assemblies[k]!.holder.visible);
+  }
+
+  /** The demonstration is paused (the guided tour's pause). */
+  get presentationPaused(): boolean {
+    return this.tour.playing && this.tour.paused;
   }
 
   dispose() {

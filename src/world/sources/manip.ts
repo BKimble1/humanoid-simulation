@@ -292,6 +292,15 @@ export class ManipSource implements PoseSource {
     this.pose.set('neck_pitch', Math.max(-0.4, Math.min(0.6, -Math.atan2(dd.y, Math.hypot(dd.x, dd.z)) - this.lean * DEG * 0.8)));
   }
 
+  /** Where the held object's centre should be for the hands of a (displayed) pose. */
+  expectedCentre(kin: Kinematics): Vector3 | null {
+    const it = this.item;
+    if (!this.held) return null;
+    const grasp = it.hands === 'both' ? kin.palm('L').add(kin.palm('R')).multiplyScalar(0.5) : kin.palm('R');
+    const off = it.hands === 'both' ? new Vector3(0, -it.grip.y, -it.grip.z) : new Vector3(it.size.x / 2 + 0.012, -it.grip.y, -it.grip.z + 0.005);
+    return grasp.add(off).add(new Vector3(0, -this.sim.slip, 0));
+  }
+
   readouts(r: Record<string, number | string | boolean>) {
     const s = this.sim;
     r.mStage = this.stage;

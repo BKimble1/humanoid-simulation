@@ -80,20 +80,21 @@ test('pause holds over real elapsed time with the page running its own frames, a
   await page.evaluate(() => (window as unknown as { __fabPerfReset: () => void }).__fabPerfReset());
   const a = await state(page);
   const t0 = Date.now();
+  // at least 4 s of real time and at least five frames drawn by the page itself (a software
+  // renderer on a busy machine can take a second or more per frame)
   await page.waitForTimeout(4000);
+  await expect.poll(() => page.evaluate(() => (window as unknown as W).__fabPerf().frames.frames), { timeout: 120_000, message: 'the page kept drawing frames while paused' }).toBeGreaterThanOrEqual(5);
   const b = await state(page);
-  const frames1 = await page.evaluate(() => (window as unknown as W).__fabPerf().frames.frames);
-  // (a handful at least: a software renderer on a busy machine draws a frame or two a second)
-  expect(frames1, 'the page kept drawing frames while paused').toBeGreaterThanOrEqual(3);
   expect(b, `nothing presented changed in ${((Date.now() - t0) / 1000).toFixed(1)} s of real time`).toEqual(a);
   // play: the tour clock moves on by no more than the real time since, from where it was
   const r0 = Date.now();
   await toggle(page);
   await page.waitForTimeout(1200);
+  await expect.poll(async () => (await tour(page)).t - a.tourT, { timeout: 120_000, message: 'the clock moved on' }).toBeGreaterThan(0.05);
   const c = await tour(page);
   const elapsed = (Date.now() - r0) / 1000;
   expect(c.index).toBe(CH.walk);
-  expect(c.t - a.tourT, 'the clock moved on').toBeGreaterThan(0.05);
+  // after 4 s or more of pause, the clock has moved by no more than the real time since play
   expect(c.t - a.tourT, `no catching up (${elapsed.toFixed(2)} s real)`).toBeLessThanOrEqual(elapsed + 0.1);
   expect(errors).toEqual([]);
 });

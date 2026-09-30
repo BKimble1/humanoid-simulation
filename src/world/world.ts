@@ -152,6 +152,7 @@ export class World {
       if (l.walking || this.sceneId === 'sim.wholebody') this.walk.start(GAITS[l.gait]);
     };
     this.director.onClamp = (by) => this.telemetry.mark('camera-clamp', by.toFixed(3));
+    this.director.onMove = (shot, d) => this.telemetry.mark('camera-move', `${shot} ${d.toFixed(2)}`);
     this.overlays = new Overlays(this.body);
     this.limits = new Limits(this);
     this.tour = new TourRunner(this);

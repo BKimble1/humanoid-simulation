@@ -49,7 +49,7 @@ interface Sample {
   actuatorOut: number;
   assemblies: string;
 }
-type Tel = { samples: Sample[]; events: { kind: string; i: number }[] };
+type Tel = { samples: Sample[]; events: { kind: string; i: number; detail?: string }[] };
 
 async function startTelemetry(page: Page) {
   await page.evaluate(() => (window as unknown as { __fabTelemetry: { start(): void } }).__fabTelemetry.start());
@@ -95,6 +95,11 @@ test('overview → hand → actuators → forces, repeated clicks and a payload 
   expectWithin(t.samples, 'pv', 0.5, 'pelvis');
   expectWithin(t.samples, 'ca', 15, 'camera');
   expect(Math.min(...t.samples.map((s) => s.cc)), 'camera clear of the robot').toBeGreaterThan(0.05);
+  // camera moves: most take 0.8–1.8 s, none more than 2 s unless it swings out around the robot
+  const moves = t.events.filter((e) => e.kind === 'camera-move').map((e) => Number(e.detail!.split(' ')[1]));
+  expect(moves.length).toBeGreaterThan(5);
+  expect(moves.filter((d) => d >= 0.8 && d <= 1.8).length / moves.length, `move durations ${moves.join(', ')}`).toBeGreaterThanOrEqual(0.6);
+  expect(Math.max(...moves)).toBeLessThanOrEqual(3.4);
   noFailures(t);
   expect(errors).toEqual([]);
 });

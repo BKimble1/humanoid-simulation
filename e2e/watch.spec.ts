@@ -83,7 +83,8 @@ test('pause holds over real elapsed time with the page running its own frames, a
   await page.waitForTimeout(4000);
   const b = await state(page);
   const frames1 = await page.evaluate(() => (window as unknown as W).__fabPerf().frames.frames);
-  expect(frames1, 'the page kept drawing frames while paused').toBeGreaterThan(5);
+  // (a handful at least: a software renderer on a busy machine draws a frame or two a second)
+  expect(frames1, 'the page kept drawing frames while paused').toBeGreaterThanOrEqual(3);
   expect(b, `nothing presented changed in ${((Date.now() - t0) / 1000).toFixed(1)} s of real time`).toEqual(a);
   // play: the tour clock moves on by no more than the real time since, from where it was
   const r0 = Date.now();

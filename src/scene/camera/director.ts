@@ -156,6 +156,8 @@ export class Director {
   transitionId = 0;
   /** Called if the last-resort clamp had to push the camera out (telemetry). */
   onClamp?: (by: number) => void;
+  /** Called when a move starts, with the shot and the move's duration (telemetry). */
+  onMove?: (shot: string, duration: number) => void;
   /** Time scale for reduced motion (transitions become short cross-moves). */
   reducedMotion = false;
   floor = 0.12;
@@ -279,13 +281,17 @@ export class Director {
     const dest = this.targetOf(shot);
     this.follow.copy(dest);
     this.followV.set(0, 0, 0);
-    // duration from the size of the move (angular, distance ratio, target travel)
+    // duration from how far the camera travels: long enough that its acceleration stays near
+    // A_MAX (a quintic's peak is about 5.8·D/T² over a distance D), and the view turns at a
+    // comfortable rate. Most moves take 0.8–1.8 s.
     const dAz = Math.abs(wrap(shot.az - this.from.az));
     const dEl = Math.abs(shot.el - this.from.el);
-    const dD = Math.abs(Math.log(this.distOf(shot) / Math.max(0.05, this.from.dist)));
+    const d1 = this.distOf(shot);
+    const dm = (this.from.dist + d1) / 2;
     const dT = dest.distanceTo(this.from.target);
-    const auto = 0.9 + 0.5 * dAz + 0.9 * dEl + 0.65 * dD + 0.45 * dT;
-    this.dur = opts.instant ? 0 : (opts.duration ?? shot.duration ?? Math.min(3.0, Math.max(0.9, auto)));
+    const travel = dm * (dAz * Math.cos((shot.el + this.from.el) / 2) + dEl) + Math.abs(d1 - this.from.dist) + dT;
+    const auto = Math.max(0.8 + 0.25 * dAz + 0.4 * dEl, Math.sqrt((5.8 * travel) / A_MAX));
+    this.dur = opts.instant ? 0 : (opts.duration ?? shot.duration ?? Math.min(2.4, Math.max(0.8, auto)));
     if (this.reducedMotion && !opts.instant) this.dur = Math.min(this.dur, 0.5);
     // bound the carried velocity so it cannot throw the path wide
     const T = Math.max(0.05, this.dur);
@@ -301,6 +307,7 @@ export class Director {
     this.moving = this.dur > 0;
     this.planPath();
     if (!this.moving) this.snapToShot();
+    else this.onMove?.(shot.id, this.dur);
   }
 
   /** The state along the planned move at u (0 … 1), without avoidance. */
@@ -660,6 +667,9 @@ export class Director {
     }
   }
 }
+
+/** The acceleration a planned camera move is sized for, m/s². */
+const A_MAX = 8;
 
 const _e = new Vector3();
 const _p = new Vector3();

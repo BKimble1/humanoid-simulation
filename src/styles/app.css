@@ -480,11 +480,23 @@ a {
   gap: 2px;
   z-index: 10;
 }
+/* a soft scrim: the list stays readable where the robot's white shell passes behind it */
+.rail::before {
+  content: '';
+  position: absolute;
+  inset: -28px -72px -28px -18px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(8, 9, 11, 0.62), rgba(8, 9, 11, 0.4) 55%, rgba(8, 9, 11, 0));
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+}
 .rail__item {
   display: flex;
   align-items: baseline;
   gap: 10px;
   padding: 7px 12px 7px 10px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
   border: 0;
   border-left: 1px solid var(--line);
   background: none;
@@ -524,6 +536,8 @@ a {
   bottom: 18px;
   width: var(--panel-w);
   overflow-y: auto;
+  /* the panel scrolls on its own: reaching its end never scrolls the page or moves the view */
+  overscroll-behavior: contain;
   padding: 20px 20px 16px;
   z-index: 10;
   scrollbar-width: thin;

@@ -34,6 +34,10 @@ import { useApp } from '../../state/store';
 import { ITEMS, type ItemId } from '../cart';
 import type { Feature, World } from '../world';
 
+/** Backgrounds of the depth and segmentation images (shared: the inset is drawn every frame). */
+const DEPTH_BG = new Color('#050506');
+const SEG_BG = new Color('#0b0c10');
+
 export type VisionMode = 'camera' | 'depth' | 'segmentation';
 
 const S = HEAD_CAMERAS.stereo;
@@ -194,10 +198,10 @@ export class Vision implements Feature {
     }
     if (this.mode === 'depth') {
       scene.overrideMaterial = depthMat;
-      scene.background = new Color('#050506');
+      scene.background = DEPTH_BG;
     } else if (this.mode === 'segmentation') {
       this.segment(w, true);
-      scene.background = new Color('#0b0c10');
+      scene.background = SEG_BG;
     } else renderer.toneMapping = AgXToneMapping;
     renderer.render(scene, this.cam);
     // copy it out at once (the drawing buffer is valid until this frame is composited); the

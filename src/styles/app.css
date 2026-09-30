@@ -1683,15 +1683,30 @@ a {
     bottom: 8px;
     width: calc(100% - 16px);
     padding: 12px 12px 10px;
-    grid-template-columns: 1fr;
+    gap: 6px 10px;
+  }
+  /* the chapter line shares the first row with the controls (never under them), the caption
+     takes the full width below */
+  .watchbar__text {
+    display: contents;
+  }
+  .watchbar__text .eyebrow {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    line-height: 1.5;
+    animation: fadeUp 0.6s var(--ease);
   }
   .watchbar__controls {
-    order: -1;
-    justify-content: flex-end;
-    margin-bottom: -30px;
+    grid-column: 2;
+    grid-row: 1;
   }
   .watchbar__caption {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0;
     font-size: 13px;
+    animation: fadeUp 0.6s var(--ease);
   }
   .info__panel {
     padding: 22px 18px 32px;

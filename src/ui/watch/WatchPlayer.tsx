@@ -13,6 +13,9 @@ const Icon = ({ d }: { d: string }) => (
   </svg>
 );
 
+/** A number stays on the same line as its unit ("260 Nm"). */
+const keepUnits = (text: string) => text.replace(/(\d) (?=(?:Nm|kg|kWh|W|V|Hz|kHz|m\/s|mm|cm|m|N|A|ms|s|h|°C)\b)/g, '$1\u00a0');
+
 export function WatchPlayer({ world }: { world: World }) {
   const tour = useApp((s) => s.tour);
   const go = useApp((s) => s.go);
@@ -40,7 +43,7 @@ export function WatchPlayer({ world }: { world: World }) {
           Tour · {String(tour.index + 1).padStart(2, '0')} / {TOUR.length} · {c.title}
         </p>
         <p className="watchbar__caption" aria-live="polite">
-          {c.caption}
+          {keepUnits(c.caption)}
         </p>
       </div>
       <div className="watchbar__controls">

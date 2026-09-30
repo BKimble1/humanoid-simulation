@@ -151,7 +151,7 @@ test('the framing follows the layout: orientation changes and the phone sheet ke
         return { x: ((q.x + 1) / 2) * c.width, y: ((1 - q.y) / 2) * c.height };
       });
       const header = document.querySelector('header')?.getBoundingClientRect();
-      const panel = [...document.querySelectorAll('aside.side, .watchbar')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+      const panel = Array.from(document.querySelectorAll('aside.side, .watchbar')).map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
       const top = header ? header.bottom : 0;
       const bottom = Math.min(c.height, ...panel.filter((r) => r.width > c.width * 0.6).map((r) => r.top));
       return { top: Math.min(...sp.map((p) => p.y)), bottom: Math.max(...sp.map((p) => p.y)), left: Math.min(...sp.map((p) => p.x)), right: Math.max(...sp.map((p) => p.x)), free: { top, bottom, width: c.width } };

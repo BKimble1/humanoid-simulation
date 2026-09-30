@@ -1,6 +1,7 @@
 import { DIM } from '../spec/body';
 import { useApp } from '../state/store';
 import { PlayIcon } from './Header';
+import { TOUR_LENGTH } from '../world/tour';
 
 /** The opening: the robot is the subject; the title and three ways in sit beside it. */
 export function Intro({ mass, dof }: { mass: number; dof: number }) {
@@ -31,11 +32,11 @@ export function Intro({ mass, dof }: { mass: number; dof: number }) {
           <span className="watch__dot">
             <PlayIcon />
           </span>
-          Watch the four-minute tour
+          Watch the guided tour · {Math.round(TOUR_LENGTH / 60)} min
         </button>
       </section>
       <p className="intro__meta" aria-hidden>
-        <b>FO-H1</b> · original research prototype, not a product
+        <b>FO-H1</b> · an original design for this simulation, not a product
         <br />
         <span className="num">
           {DIM.height.toFixed(2)} m · {mass.toFixed(1)} kg · {dof} actuated joints

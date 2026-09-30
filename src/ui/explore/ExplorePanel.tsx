@@ -8,6 +8,7 @@ import { useApp, type SystemId } from '../../state/store';
 import type { World } from '../../world/world';
 import { Btn, Legend, Segmented, SpecRow } from '../kit';
 import { ActuatorDetail } from './ActuatorDetail';
+import { BalanceLive, PowerLive, ThermalLive, VisionView } from './SystemDetail';
 
 const HOVER: Partial<Record<SystemId, import('../../scene/robot/rig').VisualGroup>> = {
   structure: 'structure',
@@ -49,6 +50,10 @@ export function ExplorePanel({ world }: { world: World }) {
         </h2>
         {!focused && <p className="side__lede">{info.lede}</p>}
         {system === 'actuators' && <ActuatorDetail world={world} />}
+        {system === 'vision' && <VisionView world={world} />}
+        {system === 'power' && <PowerLive />}
+        {system === 'thermal' && <ThermalLive world={world} />}
+        {(system === 'balance' || system === 'forces') && <BalanceLive />}
         {!focused && (
           <div className="specs">
             {info.specs.map((s) => (

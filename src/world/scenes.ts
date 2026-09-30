@@ -71,7 +71,7 @@ export const SCENES: Record<string, SceneDef> = {
     gaze: 'ahead',
   },
   'explore.vision': {
-    shot: (w) => ({ id: 'vision', target: () => w.anchor('head').add(V(0, -0.25, 0.55)), az: 2.55, el: 0.3, dist: 1.55, fov: 34, orbit: { el: [0, 0.8], dist: [0.7, 1.4] } }),
+    shot: (w) => ({ id: 'vision', target: () => w.anchor('head').add(V(-0.08, -0.32, 0.42)), az: -2.5, el: 0.28, dist: 1.7, fov: 34, ox: 0.1, orbit: { el: [0, 0.8], dist: [0.7, 1.6] } }),
     channels: { cart: 1, vision: 1, labels: 1 },
     pose: 'idle',
     idle: 'rest',
@@ -123,7 +123,7 @@ export const SCENES: Record<string, SceneDef> = {
     gaze: 'camera',
   },
   'sim.joint': {
-    shot: (w) => ({ id: 'joint', target: () => w.rigTarget(), az: 0.72, el: 0.16, dist: 1.45, fov: 30, orbit: { el: [-0.1, 0.9], dist: [0.6, 1.8] } }),
+    shot: (w) => ({ id: 'joint', target: () => w.rigTarget(), az: 0.95, el: 0.18, dist: 2.1, fov: 30, ox: 0.1, orbit: { el: [-0.1, 0.9], dist: [0.8, 2.6] } }),
     channels: { rigLight: 1 },
     pose: 'idle',
     idle: 'rest',
@@ -145,15 +145,59 @@ export const SCENES: Record<string, SceneDef> = {
     gaze: 'ahead',
   },
   'sim.manipulation': {
-    shot: () => ({ id: 'manip', target: V(0.05, 1.0, 0.42), az: 0.95, el: 0.22, dist: 1.9, fov: 30, orbit: ORBIT }),
+    shot: () => ({ id: 'manip', target: V(-0.12, 1.0, 0.3), az: -1.12, el: 0.2, dist: 2.1, fov: 30, ox: 0.1, orbit: ORBIT }),
     channels: { cart: 1, forces: 0.8 },
     pose: 'manip',
   },
   'sim.wholebody': {
     shot: (w) => ({ id: 'whole', target: () => w.walkTarget().add(V(0, 0.05, 0)), az: 0.75, el: 0.1, dist: 4.1, fov: 30, orbit: ORBIT }),
-    channels: { loop: 1, balanceViz: 0.8, forces: 0.8 },
+    channels: { loop: 1, dataFlow: 0.7, balanceViz: 0.8, forces: 0.8, ik: 1 },
     pose: 'walk',
     gaze: 'ahead',
+  },
+  'sim.limits.payload': {
+    shot: () => ({ id: 'limPayload', target: V(0, 0.85, 0.05), az: 0.75, el: 0.1, dist: 3.1, fov: 30, orbit: ORBIT }),
+    channels: { loads: 1, balanceViz: 0.7 },
+    pose: 'idle',
+    idle: 'rest',
+  },
+  'sim.limits.thermal': {
+    shot: () => ({ id: 'limThermal', target: V(0, 0.8, 0), az: 0.55, el: 0.1, dist: 3.2, fov: 30, orbit: ORBIT }),
+    channels: { thermal: 1 },
+    pose: 'exercise',
+  },
+  'sim.limits.battery': {
+    shot: (w) => ({ id: 'limBattery', target: () => w.walkTarget(), az: 1.2, el: 0.08, dist: 3.8, fov: 30, orbit: ORBIT }),
+    channels: { powerFlow: 0.8, xray: 0.35 },
+    pose: 'walk',
+    gaze: 'ahead',
+  },
+  'sim.limits.torque': {
+    shot: (w) => ({ id: 'limTorque', target: () => w.rigTarget(), az: 0.72, el: 0.16, dist: 1.45, fov: 30, orbit: { el: [-0.1, 0.9], dist: [0.6, 1.8] } }),
+    channels: { rigLight: 1 },
+    pose: 'idle',
+    idle: 'rest',
+  },
+  'sim.limits.current': {
+    shot: (w) => ({ id: 'limCurrent', target: () => w.rigTarget(), az: 0.9, el: 0.14, dist: 1.5, fov: 30, orbit: { el: [-0.1, 0.9], dist: [0.6, 1.8] } }),
+    channels: { rigLight: 1 },
+    pose: 'idle',
+    idle: 'rest',
+  },
+  'sim.limits.contact': {
+    shot: () => ({ id: 'limContact', target: V(0, 0.75, 0.25), az: 1.25, el: 0.14, dist: 3.8, fov: 30, orbit: ORBIT }),
+    channels: { balanceViz: 1, forces: 1 },
+    pose: 'balance',
+  },
+  'sim.limits.reach': {
+    shot: () => ({ id: 'limReach', target: V(0.12, 1.12, 0.4), az: 1.05, el: 0.2, dist: 2.5, fov: 30, orbit: ORBIT }),
+    channels: { ik: 1 },
+    pose: 'reach',
+  },
+  'sim.limits.grip': {
+    shot: () => ({ id: 'limGrip', target: V(-0.2, 1.0, 0.36), az: -1.0, el: 0.22, dist: 1.55, fov: 30, ox: 0.1, orbit: ORBIT }),
+    channels: { cart: 1, forces: 0.8 },
+    pose: 'manip',
   },
   'sim.limits': {
     shot: () => ({ id: 'limits', target: V(0, 0.9, 0), az: 0.6, el: 0.12, dist: 3.4, fov: 30, orbit: ORBIT }),

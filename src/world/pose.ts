@@ -18,16 +18,29 @@ export interface FootPose {
   quat: Quaternion;
 }
 
+/** Something the robot holds: where it is (world), its mass, and which hands carry it. */
+export interface Held {
+  pos: Vector3;
+  mass: number;
+  hands: 'both' | 'L' | 'R';
+}
+
 export interface PoseSource {
   id: string;
   pose: Pose;
   feet: Record<Side, FootPose>;
+  /** What the robot holds now (null: nothing). */
+  held?: Held | null;
+  /** Heating and discharge speed-up for demonstrations of long duty cycles (1: real time). */
+  thermalScale?: number;
   /** Advance the source by dt seconds. */
   update(dt: number): void;
   /** Called when the source becomes the driver's target (reset state as needed). */
   enter?(from: Pose): void;
   /** Called when the driver leaves the source. */
   exit?(): void;
+  /** Numbers for the panels. */
+  readouts?(r: Record<string, number | string | boolean>): void;
 }
 
 const LEG_JOINTS = new Set(['hip_yaw', 'hip_roll', 'hip_pitch', 'knee', 'ankle_pitch', 'ankle_roll'].flatMap((j) => [`L_${j}`, `R_${j}`]).map((id) => JOINT_INDEX[id as keyof typeof JOINT_INDEX]));

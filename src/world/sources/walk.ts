@@ -18,10 +18,10 @@ import { GaitGenerator, type GaitFrame } from '../../engine/gait';
 import { MotionDynamics, type DynamicsResult } from '../../engine/motionDynamics';
 import type { BodyEnergy } from '../../engine/power';
 import type { RobotModel } from '../../engine/robot';
-import { Kinematics, Pose } from '../../engine/skeleton';
+import { JOINT_INDEX, Kinematics, Pose } from '../../engine/skeleton';
 import { solveLeg } from '../../engine/ik';
 import { poseFromGait } from '../../engine/wholebody';
-import type { FootPose, PoseSource } from '../pose';
+import type { FootPose, Held, PoseSource } from '../pose';
 
 interface Snap {
   com: Vector3;
@@ -39,6 +39,9 @@ export class WalkSource implements PoseSource {
   gen: GaitGenerator;
   gait: GaitSpec = GAITS.normal;
   carry = false;
+  /** Mass carried when `carry` (the Engineer payload if set, otherwise a 10 kg box). */
+  carryMass = 10;
+  held: Held | null = null;
   /** Belt travel so far (m) and speed (m/s). */
   belt = 0;
   beltSpeed = 0;
@@ -53,6 +56,12 @@ export class WalkSource implements PoseSource {
   /** Where the robot stands in the world when it starts (x, z). */
   origin = new Vector3();
   onTick: ((w: WalkSource) => void)[] = [];
+  /** The last 4 s at 100 Hz: vertical ground reaction per foot (N), battery power (W), knee torques (Nm). */
+  trace = { fl: [] as number[], fr: [] as number[], p: [] as number[], kl: [] as number[], kr: [] as number[] };
+  /** Steps taken since the walk started, and the time walked. */
+  steps = 0;
+  walkedTime = 0;
+  private lastSupport = '';
 
   constructor(
     private model: () => RobotModel,
@@ -84,6 +93,10 @@ export class WalkSource implements PoseSource {
   }
 
   start(gait: GaitSpec) {
+    if (!this.running) {
+      this.steps = 0;
+      this.walkedTime = 0;
+    }
     this.gait = gait;
     this.gen.walk(gait);
     this.running = true;
@@ -135,10 +148,37 @@ export class WalkSource implements PoseSource {
       polygon: f.feet[s].contact === 'air' ? [] : footPolygon(f.feet[s].step.x, f.feet[s].step.z, f.feet[s].step.yaw),
     }));
     this.kin.update(this.tickPose);
-    const pay = this.carry && this.model().config.payload > 0 ? this.kin.palm('L').add(this.kin.palm('R')).multiplyScalar(0.5) : null;
-    this.last = this.dyn.update(this.tickPose, dt, contacts, pay);
-    this.energy().step(dt, this.last.tau, this.last.qd);
+    const pay = this.carry ? this.kin.palm('L').add(this.kin.palm('R')).multiplyScalar(0.5) : null;
+    this.last = this.dyn.update(this.tickPose, dt, contacts, pay, this.carry ? this.carryMass : 0);
+    const e = this.energy();
+    e.step(dt, this.last.tau, this.last.qd);
+    const tr = this.trace;
+    tr.fl.push(this.last.grf.L.force.y);
+    tr.fr.push(this.last.grf.R.force.y);
+    tr.p.push(e.summary.battery);
+    tr.kl.push(this.last.tau[JOINT_INDEX.L_knee]);
+    tr.kr.push(this.last.tau[JOINT_INDEX.R_knee]);
+    if (tr.fl.length > 400) for (const k of Object.keys(tr) as (keyof typeof tr)[]) tr[k].shift();
+    if (f.walking) {
+      this.walkedTime += dt;
+      const sup = f.feet.L.contact === 'air' ? 'R' : f.feet.R.contact === 'air' ? 'L' : this.lastSupport;
+      if (sup !== this.lastSupport && sup) this.steps++;
+      this.lastSupport = sup;
+    }
     for (const cb of this.onTick) cb(this);
+  }
+
+  readouts(r: Record<string, number | string | boolean>) {
+    const f = this.frame;
+    r.wWalking = f.walking;
+    r.wSpeed = f.walking ? this.gait.speed : 0;
+    r.wBelt = -this.beltSpeed;
+    r.wCadence = this.walkedTime > 1 ? (this.steps / this.walkedTime) * 60 : (60 / this.gait.stepTime);
+    r.wStepLength = this.gait.stepLength;
+    r.wCarry = this.carry;
+    r.wCarryMass = this.carry ? this.carryMass : 0;
+    r.wContactL = f.feet.L.contact;
+    r.wContactR = f.feet.R.contact;
   }
 
   update(dt: number) {
@@ -164,6 +204,11 @@ export class WalkSource implements PoseSource {
       solveLeg(this.pose, s, this.feet[s].ankle, this.feet[s].quat, this.kin.scale);
     }
     this.beltNow = beltNow;
+    if (this.carry) {
+      this.kin.update(this.pose);
+      const pos = this.kin.palm('L').add(this.kin.palm('R')).multiplyScalar(0.5);
+      this.held = { pos, mass: this.carryMass, hands: 'both' };
+    } else this.held = null;
   }
 
   /** Belt travel at the interpolated render time (the lab's belt texture follows it). */

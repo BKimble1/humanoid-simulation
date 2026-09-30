@@ -74,6 +74,9 @@ export class GraspSim {
   crushed = false;
   /** Hand's vertical acceleration, m/s² (lifting). */
   handAcc = 0;
+  /** Share of the object's weight the hand carries (0 while it still rests on the table, rising
+   * to 1 as the lift takes it off). The grip controller follows the load as it transfers. */
+  support = 1;
   history: GraspSample[] = [];
   private lastSample = -1;
   private rng = 1;
@@ -92,7 +95,7 @@ export class GraspSim {
 
   /** Load the grasp must carry, N. */
   get load(): number {
-    return this.mass * (GRAVITY + this.handAcc);
+    return this.support * this.mass * (GRAVITY + this.handAcc);
   }
 
   /** Normal force the controller aims for at its current friction estimate. */
@@ -182,10 +185,15 @@ export class GraspSim {
     return this.load / (2 * this.mu);
   }
 
+  /** The same for the object's full weight at rest in the hand, N. */
+  get holdingNormal(): number {
+    return (this.mass * GRAVITY) / (2 * this.mu);
+  }
+
   /** The grasp cannot hold the object even at the finger actuators' limit. */
   get beyondLimit(): boolean {
     const cap = Number.isFinite(this.obj.crush) ? Math.min(this.obj.crush, GRIP.maxNormal) : GRIP.maxNormal;
-    return this.minimumNormal > cap;
+    return this.holdingNormal > cap;
   }
 }
 

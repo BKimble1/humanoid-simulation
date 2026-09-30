@@ -32,6 +32,10 @@ export interface AppState {
   /** Loading: 0 … 1, and whether the world is ready. */
   progress: number;
   ready: boolean;
+  /** Failures and limits: the scenario running (set by the world). */
+  limit: import('../world/limits').LimitId | null;
+  /** Guided tour position (set by the world while it plays). */
+  tour: { index: number; t: number; paused: boolean } | null;
   /** Readouts published by the world (numbers for the panels), ~10 Hz. */
   readouts: Record<string, number | string | boolean>;
   go: (p: Partial<Pick<AppState, 'mode' | 'system' | 'lab' | 'actuator' | 'exploded' | 'part'>>) => void;
@@ -55,6 +59,8 @@ export const useApp = create<AppState>((set, get) => ({
   progress: 0,
   ready: false,
   readouts: {},
+  limit: null,
+  tour: null,
   go: (p) => set({ ...(p.system && p.system !== get().system ? { exploded: false, part: null } : {}), ...p }),
   setConfig: (c) => set({ config: typeof c === 'function' ? c(cloneConfig(get().config)) : { ...get().config, ...c } }),
   resetConfig: () => set({ config: cloneConfig(DEFAULT_CONFIG) }),
@@ -82,7 +88,7 @@ export interface LabParams {
   ikSide: 'L' | 'R';
   showWorkspace: boolean;
   // manipulation
-  task: 'box' | 'vial' | 'tool' | 'cup' | 'shelf';
+  task: 'box' | 'vial' | 'tool' | 'cup' | 'wet' | 'shelf';
   // whole-body view
   wholeMotion: 'walk' | 'balance' | 'reach';
 }

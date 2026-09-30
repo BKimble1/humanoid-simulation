@@ -35,6 +35,11 @@ export interface PostureInput {
   /** Payload position (world), when carrying. */
   payloadPos?: Vector3;
   iterations?: number;
+  /**
+   * Lower the pelvis where a leg would otherwise straighten (a softly limited reach, knee
+   * kept above ~5°): what the pelvis does at the end of a long stance.
+   */
+  limitReach?: boolean;
 }
 
 export interface PostureResult {
@@ -61,6 +66,7 @@ export function solvePosture(model: RobotModel, kin: Kinematics, pose: Pose, inp
   const iters = input.com ? (input.iterations ?? 4) : 1;
   const c = new Vector3();
   for (let i = 0; i < iters; i++) {
+    if (input.limitReach) limitLegReach(pose, input.feet, kin, input.pelvisHeight);
     const a = solveLeg(pose, 'L', input.feet.L.ankle, input.feet.L.quat, kin.scale);
     const b = solveLeg(pose, 'R', input.feet.R.ankle, input.feet.R.quat, kin.scale);
     reached = a.reached && b.reached;
@@ -71,6 +77,7 @@ export function solvePosture(model: RobotModel, kin: Kinematics, pose: Pose, inp
     pose.pelvisPos.z += input.com.y - c.z;
   }
   if (input.com) {
+    if (input.limitReach) limitLegReach(pose, input.feet, kin, input.pelvisHeight);
     const a = solveLeg(pose, 'L', input.feet.L.ankle, input.feet.L.quat, kin.scale);
     const b = solveLeg(pose, 'R', input.feet.R.ankle, input.feet.R.quat, kin.scale);
     reached = a.reached && b.reached;
@@ -78,6 +85,30 @@ export function solvePosture(model: RobotModel, kin: Kinematics, pose: Pose, inp
   kin.update(pose);
   model.com(kin, input.payloadPos, c);
   return { pose, com: c, reached };
+}
+
+const _hip = new Vector3();
+
+function limitLegReach(pose: Pose, feet: { L: FootTarget; R: FootTarget }, kin: Kinematics, base: number) {
+  pose.pelvisPos.y = base;
+  const A = DIM.thigh * kin.scale.thigh;
+  const B = DIM.shin * kin.scale.shin;
+  const legAt = (kneeDeg: number) => Math.sqrt(A * A + B * B + 2 * A * B * Math.cos(kneeDeg * DEG));
+  const rs = legAt(14);
+  const rm = legAt(5);
+  let drop = 0;
+  for (const side of ['L', 'R'] as const) {
+    _hip.set(side === 'L' ? DIM.hipHalfWidth : -DIM.hipHalfWidth, 0, 0).applyQuaternion(pose.pelvisQuat).add(pose.pelvisPos);
+    const a = feet[side].ankle;
+    const v = _hip.y - a.y;
+    const h2 = (_hip.x - a.x) ** 2 + (_hip.z - a.z) ** 2;
+    const r = Math.sqrt(h2 + v * v);
+    if (r <= rs) continue;
+    const r2 = rs + (rm - rs) * Math.tanh((r - rs) / (rm - rs));
+    const v2 = Math.sqrt(Math.max(0, r2 * r2 - h2));
+    drop = Math.max(drop, v - v2);
+  }
+  pose.pelvisPos.y -= drop;
 }
 
 /** Foot target standing flat at a ground point with a heading. */
@@ -115,8 +146,8 @@ export function carryArms(): Partial<Record<JointId, number>> {
     R_shoulder_pitch: 10,
     L_shoulder_roll: 8,
     R_shoulder_roll: 8,
-    L_arm_yaw: 18,
-    R_arm_yaw: 18,
+    L_arm_yaw: -4,
+    R_arm_yaw: -4,
     L_elbow: 84,
     R_elbow: 84,
     L_wrist_yaw: 0,
@@ -180,5 +211,6 @@ export function poseFromGait(model: RobotModel, kin: Kinematics, pose: Pose, f: 
     upper,
     payloadPos: opts.payloadPos,
     iterations: 3,
+    limitReach: true,
   });
 }

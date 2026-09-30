@@ -174,7 +174,7 @@ export const SYSTEMS: SystemInfo[] = [
     id: 'thermal',
     title: 'Thermal',
     short: 'Thermal',
-    lede: 'Everything that converts energy loses some as heat: motor windings (I²R), drives, the battery and the computers. Here FO-H1 does repeated squats while time runs ten times faster, and each part warms at its own rate.',
+    lede: 'Everything that converts energy loses some as heat: motor windings (I²R), drives, the battery and the computers. Here FO-H1 does repeated squats while heating is sped up forty times, and each part warms at its own rate.',
     specs: [
       { label: 'Winding derating from', value: `${WINDING.derateStart}`, unit: '°C', kind: 'design' },
       { label: 'A100 thermal path', value: `${f(MOTOR_FRAMES.F100.rWindingHousing + MOTOR_FRAMES.F100.rHousingAmbient, 2)}`, unit: 'K/W', kind: 'estimate' },

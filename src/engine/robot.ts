@@ -128,15 +128,15 @@ export class RobotModel {
    * Whole-body centre of mass in the world. The payload, if any, is at `payloadPos` (world);
    * by default midway between the palms.
    */
-  com(kin: Kinematics, payloadPos?: Vector3, out = new Vector3()): Vector3 {
+  com(kin: Kinematics, payloadPos?: Vector3, out = new Vector3(), payloadMass = this.config.payload): Vector3 {
     out.set(0, 0, 0);
     const tmp = new Vector3();
     for (const [seg, s] of this.segments) out.addScaledVector(kin.point(seg, s.com, tmp), s.mass);
-    if (this.config.payload > 0) {
+    if (payloadMass > 0) {
       const p = payloadPos ?? kin.palm('L', new Vector3()).add(kin.palm('R', tmp)).multiplyScalar(0.5);
-      out.addScaledVector(p, this.config.payload);
+      out.addScaledVector(p, payloadMass);
     }
-    return out.divideScalar(this.totalMass);
+    return out.divideScalar(this.robotMass + Math.max(0, payloadMass));
   }
 
   /** Where the payload box sits for the carry posture, relative to the pelvis origin. */

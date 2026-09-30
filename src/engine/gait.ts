@@ -478,7 +478,12 @@ export class GaitGenerator {
       env = first ? smooth(u) : last ? 1 - smooth(u) : 1;
       const ss = 1 - p.gait.doubleSupport;
       sigma = p.kind === 'SS' ? u * ss : ss + u * (1 - ss);
-      if (first) sigma = ss + u * (1 - ss);
+      // Starting and stopping double supports are longer than a walking one: the rhythm's phase
+      // leaves (or enters) them at the single-support rate, so the COM height has no kink.
+      const rate = ss / (p.gait.stepTime * ss);
+      const T = p.t1 - p.t0;
+      if (first) sigma = 1 - rate * T * (1 - u) * u * u * u;
+      else if (last) sigma = ss + rate * T * u * (1 - u) ** 3;
       const centre = 1 - p.gait.doubleSupport / 2;
       f.bob = (1 + Math.cos(2 * Math.PI * (sigma - centre))) / 2;
     } else f.bob = 0;

@@ -5,6 +5,7 @@
  */
 import { JOINTS } from '../spec/body';
 import { runtimeHours } from '../engine/battery';
+import { JOINT_INDEX } from '../engine/skeleton';
 import { useApp } from '../state/store';
 import type { World } from './world';
 
@@ -26,6 +27,21 @@ export function publishReadouts(w: World) {
   r.loadR = b.grf?.R.load ?? 0;
   r.grfL = b.grf ? b.grf.L.force.length() : 0;
   r.grfR = b.grf ? b.grf.R.force.length() : 0;
+  // whole-body loop values
+  const kj = JOINT_INDEX.L_knee;
+  r.kneeTau = b.tau[kj];
+  r.kneeQd = b.qd[kj];
+  const kop = e.joints[kj].op;
+  r.kneeCurrent = kop ? kop.current : 0;
+  r.kneeRpm = kop ? (kop.omegaMotor * 60) / (2 * Math.PI) : 0;
+  const pq = w.driver.out.pelvisQuat;
+  r.pelvisPitch = (Math.asin(Math.max(-1, Math.min(1, 2 * (pq.w * pq.x - pq.y * pq.z)))) * 180) / Math.PI;
+  r.comVx = b.comVel.x;
+  r.comVz = b.comVel.z;
+  r.contactL = b.contacts.L.length > 0;
+  r.contactR = b.contacts.R.length > 0;
+  r.zmpX = b.zmp.x;
+  r.zmpZ = b.zmp.z;
   // power
   r.batteryW = s.battery;
   r.batteryA = s.batteryCurrent;
@@ -68,6 +84,7 @@ export function publishReadouts(w: World) {
     r.actTemp = a.temperature;
     r.slow = 8;
   }
+  w.driver.source?.readouts?.(r);
   for (const f of w.features) f.readouts?.(r, w);
   useApp.setState({ readouts: r });
 }

@@ -26,6 +26,7 @@ import {
   SRGBColorSpace,
   type Side,
   type Texture,
+  Vector4,
 } from 'three';
 
 export interface SurfaceUniforms {
@@ -36,6 +37,19 @@ export interface SurfaceUniforms {
   uNoise: { value: number };
   uNoiseScale: { value: number };
 }
+
+/**
+ * Thermal view: up to HEAT_MAX heat sources (world position, temperature rise over ambient)
+ * shared by every robot material. The surface temperature at a point is the ambient plus each
+ * source's rise falling off with distance (a visual approximation of conduction from the
+ * actuator housings, battery and computers into the structure).
+ */
+export const HEAT_MAX = 40;
+export const HEAT = {
+  uHeatSrc: { value: Array.from({ length: HEAT_MAX }, () => new Vector4(0, -10, 0, 0)) },
+  uHeatAmbient: { value: 25 },
+  uHeatRadius: { value: 0.07 },
+};
 
 export type FabMaterial = MeshPhysicalMaterial & { userData: { fab: SurfaceUniforms; key: string } };
 
@@ -121,18 +135,36 @@ export function robotSurface(key: string): FabMaterial {
   m.userData.fab = u;
   m.userData.key = key;
   m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, u);
+    Object.assign(shader.uniforms, u, HEAT);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aPbr; attribute vec3 aEmit; attribute vec2 aNoise;\nvarying vec4 vPbr; varying vec3 vEmit; varying vec2 vNoiseP; varying vec3 vFabPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = aPbr; vEmit = aEmit; vNoiseP = aNoise; vFabPos = position;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aPbr; attribute vec3 aEmit; attribute vec2 aNoise;\nvarying vec4 vPbr; varying vec3 vEmit; varying vec2 vNoiseP; varying vec3 vFabPos; varying vec3 vFabWorld;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = aPbr; vEmit = aEmit; vNoiseP = aNoise; vFabPos = position; vFabWorld = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
         `#include <common>
-varying vec4 vPbr; varying vec3 vEmit; varying vec2 vNoiseP; varying vec3 vFabPos;
+varying vec4 vPbr; varying vec3 vEmit; varying vec2 vNoiseP; varying vec3 vFabPos; varying vec3 vFabWorld;
 uniform float uHighlight; uniform vec3 uHighlightColor; uniform float uHeat; uniform vec3 uHeatColor;
 uniform float uNoise; uniform float uNoiseScale;
-${NOISE_GLSL}`,
+uniform vec4 uHeatSrc[${HEAT_MAX}]; uniform float uHeatAmbient; uniform float uHeatRadius;
+${NOISE_GLSL}
+vec3 fabThermal(float T) {
+  float t = clamp((T - 25.0) / 80.0, 0.0, 1.0);
+  vec3 c0 = vec3(0.012, 0.014, 0.045), c1 = vec3(0.075, 0.03, 0.27), c2 = vec3(0.45, 0.04, 0.16), c3 = vec3(0.87, 0.26, 0.025), c4 = vec3(1.0, 0.82, 0.4);
+  vec3 c = mix(c0, c1, smoothstep(0.0, 0.22, t));
+  c = mix(c, c2, smoothstep(0.22, 0.48, t));
+  c = mix(c, c3, smoothstep(0.48, 0.74, t));
+  return mix(c, c4, smoothstep(0.74, 1.0, t));
+}
+float fabTemperature(vec3 p) {
+  float T = uHeatAmbient;
+  float r2 = uHeatRadius * uHeatRadius;
+  for (int i = 0; i < ${HEAT_MAX}; i++) {
+    vec3 d = p - uHeatSrc[i].xyz;
+    T += uHeatSrc[i].w * exp(-dot(d, d) / r2);
+  }
+  return T;
+}`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
@@ -146,12 +178,13 @@ roughnessFactor = clamp(vPbr.x + (fabN - 0.5) * vNoiseP.x * 2.0 * uNoise, 0.03, 
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-diffuseColor.rgb = mix(diffuseColor.rgb, uHeatColor, uHeat);`,
+vec3 fabHeatCol = uHeat > 0.001 ? fabThermal(fabTemperature(vFabWorld)) : vec3(0.0);
+diffuseColor.rgb = mix(diffuseColor.rgb, fabHeatCol * 0.35, uHeat);`,
       )
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
-totalEmissiveRadiance = vEmit * (1.0 - uHeat) + uHeatColor * uHeat * 0.55;`,
+totalEmissiveRadiance = vEmit * (1.0 - uHeat) + fabHeatCol * uHeat * 1.1;`,
       )
       .replace(
         '#include <opaque_fragment>',

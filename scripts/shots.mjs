@@ -34,10 +34,14 @@ for (const s of plan) {
   if (s.click) await page.locator(s.click).first().click();
   if (s.advance) {
     const per = s.every ?? 0;
-    for (let i = 0; i < s.advance; i++) {
-      { await page.evaluate(() => window.__fabAdvance(1)); }
-      if (per && (i + 1) % per === 0) await page.screenshot({ path: join(out, `${String(n++).padStart(3, '0')}-${s.name ?? 'f'}-${i + 1}.png`) });
-    }
+    if (!per) {
+      // logic only, drawing just the last frame (fast)
+      await page.evaluate((k) => window.__fabAdvance(k, false), s.advance);
+    } else
+      for (let i = 0; i < s.advance; i += per) {
+        await page.evaluate((k) => window.__fabAdvance(k, false), Math.min(per, s.advance - i));
+        await page.screenshot({ path: join(out, `${String(n++).padStart(3, '0')}-${s.name ?? 'f'}-${i + per}.png`), timeout: 300000 });
+      }
   }
   if (s.shot) { const ts = Date.now(); await page.screenshot({ path: join(out, `${String(n++).padStart(3, '0')}-${s.shot}.png`), timeout: 300000 }); console.log("shot", s.shot, ((Date.now() - ts) / 1000).toFixed(1), "s"); }
   if (s.log) console.log(s.log, await page.evaluate(s.logEval ?? '0'));

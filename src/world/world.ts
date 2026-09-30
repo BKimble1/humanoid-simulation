@@ -15,7 +15,7 @@ import { Vector3 } from 'three';
 import { ACTUATORS } from '../spec/actuators';
 import { GAITS } from '../spec/motion';
 import { BodyEnergy } from '../engine/power';
-import { RobotModel } from '../engine/robot';
+import { RobotModel, memberReport } from '../engine/robot';
 import { Kinematics, Pose, restPose } from '../engine/skeleton';
 import { ActuatorAssembly } from '../scene/actuator/assembly';
 import { Director } from '../scene/camera/director';
@@ -30,9 +30,21 @@ import { PoseDriver, type PoseSource } from './pose';
 import { SCENES, type SceneDef } from './scenes';
 import { IdleSource } from './sources/idle';
 import { WalkSource } from './sources/walk';
+import { BalanceSource } from './sources/balance';
+import { ReachSource } from './sources/reach';
+import { ManipSource } from './sources/manip';
 import { ActuatorLive } from './features/actuatorLive';
 import { BodyState } from './features/body';
 import { Overlays } from './features/overlays';
+import { Labels } from './features/labels';
+import { Openings } from './features/openings';
+import { Flows } from './features/flows';
+import { Look } from './features/look';
+import { Vision } from './features/vision';
+import { Props } from './features/props';
+import { RIG_PIVOT } from './props/rig';
+import { Limits } from './limits';
+import { TourRunner } from './tourRunner';
 import { publishReadouts } from './readouts';
 import { Mesh, Group, Matrix4, Quaternion } from 'three';
 
@@ -63,10 +75,22 @@ export class World {
   sources: Record<string, PoseSource> = {};
   idle: IdleSource;
   walk: WalkSource;
+  balance: BalanceSource;
+  exercise: BalanceSource;
+  reach: ReachSource;
+  manip: ManipSource;
   features: Feature[] = [];
   body = new BodyState();
   overlays: Overlays;
   actuatorLive = new ActuatorLive();
+  labels: Labels;
+  openings = new Openings();
+  flows = new Flows();
+  look = new Look();
+  vision = new Vision();
+  props = new Props();
+  limits: Limits;
+  tour: TourRunner;
   sceneId = '';
   scene: SceneDef = SCENES.intro;
   private covers: Cover[] = [];
@@ -96,10 +120,22 @@ export class World {
     this.driver = new PoseDriver(cfg.scale);
     this.idle = new IdleSource(() => this.model, new Kinematics(cfg.scale));
     this.walk = new WalkSource(() => this.model, new Kinematics(cfg.scale), () => this.energy);
-    this.sources = { idle: this.idle, walk: this.walk };
+    this.balance = new BalanceSource(() => this.model, new Kinematics(cfg.scale));
+    this.exercise = new BalanceSource(() => this.model, new Kinematics(cfg.scale));
+    this.exercise.exercise = true;
+    this.exercise.id = 'exercise';
+    this.reach = new ReachSource(() => this.model, new Kinematics(cfg.scale));
+    this.manip = new ManipSource(() => this.model, new Kinematics(cfg.scale));
+    this.sources = { idle: this.idle, walk: this.walk, balance: this.balance, exercise: this.exercise, reach: this.reach, manip: this.manip };
     this.overlays = new Overlays(this.body);
+    this.limits = new Limits(this);
+    this.tour = new TourRunner(this);
     this.stage.scene.add(this.overlays.group);
-    this.features.push(this.body, this.actuatorLive, this.overlays);
+    this.labels = new Labels(canvas.parentElement!, canvas);
+    this.lab.group.name = 'lab';
+    this.stage.scene.add(this.flows.group, this.props.group, this.vision.frustum);
+    this.props.ik.attach(this, canvas);
+    this.features.push(this.body, this.actuatorLive, this.look, this.props, this.overlays, this.flows, this.vision, this.labels);
     this.unsub.push(this.director.attach(canvas));
     this.stage.onResize = (w, h) => {
       this.director.viewW = w;
@@ -116,6 +152,8 @@ export class World {
     this.rig = buildRobot({ scale: cfg.scale, parallel: cfg.pack.parallel });
     this.stage.scene.add(this.rig.root);
     this.prepareCovers();
+    this.openings.init(this);
+    this.features.unshift(this.openings);
     progress(0.45);
     await frame();
     // first pose, first camera
@@ -136,12 +174,21 @@ export class World {
     // follow the app store
     this.unsub.push(useApp.subscribe((s, prev) => this.onStore(s, prev)));
     this.unsub.push(useLab.subscribe(() => this.onLab()));
+    this.onLab();
     if (TEST_HOOKS) {
       const w = window as unknown as Record<string, unknown>;
       w.__fab = this;
       w.__fabStores = { useApp, useLab };
-      w.__fabAdvance = (n = 1) => {
-        for (let i = 0; i < n; i++) this.step(tickVirtual());
+      // advance n frames; with render=false only the last frame is drawn (fast recording)
+      w.__fabAdvance = (n = 1, render = true) => {
+        for (let i = 0; i < n; i++) this.step(tickVirtual(), render || i === n - 1);
+      };
+      w.__fabTime = () => {
+        const t0 = performance.now();
+        this.step(tickVirtual(), false);
+        const t1 = performance.now();
+        this.stage.render(1 / 30);
+        return { logic: t1 - t0, render: performance.now() - t1 };
       };
     }
   }
@@ -160,24 +207,40 @@ export class World {
 
   // ─────────────────────────── scenes ───────────────────────────
 
-  sceneFor(s: Pick<AppState, 'mode' | 'system' | 'lab' | 'exploded'>): string {
+  sceneFor(s: Pick<AppState, 'mode' | 'system' | 'lab' | 'exploded' | 'limit'>): string {
     if (s.mode === 'intro') return 'intro';
     if (s.mode === 'explore') return s.system === 'actuators' && s.exploded ? 'explore.actuators.open' : `explore.${s.system}`;
     if (s.mode === 'engineer') return 'engineer';
-    if (s.mode === 'simulate') return `sim.${s.lab}`;
+    if (s.mode === 'simulate') return s.lab === 'limits' && s.limit ? `sim.limits.${s.limit}` : `sim.${s.lab}`;
     return this.sceneId || 'intro';
   }
 
   private onStore(s: AppState, prev: AppState) {
-    if (s.mode !== prev.mode || s.system !== prev.system || s.lab !== prev.lab || s.exploded !== prev.exploded || s.actuator !== prev.actuator) {
+    // the guided tour owns the scene while the mode is 'watch'
+    if (s.mode === 'watch' && prev.mode !== 'watch') this.tour.start(0);
+    if (s.mode !== 'watch' && prev.mode === 'watch') this.tour.stop();
+    // leaving the limits lab puts back whatever its scenario changed
+    if (this.limits.active && (s.mode !== 'simulate' || s.lab !== 'limits')) this.limits.restore();
+    if (s.mode !== prev.mode || s.system !== prev.system || s.lab !== prev.lab || s.exploded !== prev.exploded || s.actuator !== prev.actuator || s.limit !== prev.limit) {
       if (s.mode !== 'watch') this.applyScene(this.sceneFor(s));
     }
     if (s.config !== prev.config) this.applyConfig();
   }
 
+  private lastWhole = '';
   private onLab() {
     const l = useLab.getState();
-    if (this.scene.pose === 'walk') {
+    if (this.sceneId === 'sim.wholebody' && l.wholeMotion !== this.lastWhole) {
+      this.lastWhole = l.wholeMotion;
+      this.applyScene('sim.wholebody');
+    }
+    this.lastWhole = l.wholeMotion;
+    this.balance.task = l.balanceTask;
+    this.reach.mode = l.ikMode;
+    this.reach.side = l.ikSide;
+    this.manip.setTask(l.task);
+    this.walk.carryMass = this.model.config.payload > 0 ? this.model.config.payload : 10;
+    if (this.driver.source === this.walk && this.sceneId !== 'sim.wholebody') {
       if (l.walking && !this.walk.running) this.walk.start(GAITS[l.gait]);
       else if (l.walking && this.walk.running && this.walk.gait.id !== l.gait) this.walk.start(GAITS[l.gait]);
       else if (!l.walking && this.walk.running) this.walk.stop();
@@ -193,11 +256,16 @@ export class World {
     this.ch.to(def.channels);
     if (instant) for (const k of Object.keys(def.channels) as ChannelId[]) this.ch.set(k, def.channels[k]!);
     this.director.go(def.shot(this), instant ? { instant: true } : {});
-    // pose source
-    const src = def.pose === 'walk' ? this.walk : (this.sources[def.pose] ?? this.idle);
+    // pose source (the whole-body view runs whichever motion the visitor picked)
+    let kind = def.pose;
+    if (id === 'sim.wholebody') {
+      const m = useLab.getState().wholeMotion;
+      kind = m === 'walk' ? 'walk' : m === 'balance' ? 'balance' : 'reach';
+    }
+    const src = kind === 'walk' ? this.walk : (this.sources[kind] ?? this.idle);
     if (src === this.idle) this.idle.preset = def.idle ?? 'rest';
     this.driver.use(src, instant ? 0.01 : 1.0);
-    if (def.pose === 'walk') {
+    if (kind === 'walk') {
       const l = useLab.getState();
       this.walk.carry = l.carry;
       if (l.walking || id === 'sim.wholebody') this.walk.start(GAITS[l.gait]);
@@ -212,8 +280,8 @@ export class World {
 
   // ─────────────────────────── queries used by shots and features ───────────────────────────
 
-  anchor(name: string): Vector3 {
-    return this.rig.anchorWorld(name);
+  anchor(name: string, out = new Vector3()): Vector3 {
+    return this.rig.anchorWorld(name, out);
   }
 
   /** Middle of the opened actuator's parts, following the slide-out and the explode. */
@@ -231,6 +299,13 @@ export class World {
     return this.anchor(name);
   }
 
+  private members: { model: RobotModel; r: ReturnType<typeof memberReport> } | null = null;
+  /** Structural member results for the current configuration (cached per model). */
+  designMembers() {
+    if (!this.members || this.members.model !== this.model) this.members = { model: this.model, r: memberReport(this.model.config) };
+    return this.members.r;
+  }
+
   walkTarget(): Vector3 {
     this.rig.seg.get('pelvis')!.updateWorldMatrix(true, false);
     const p = this.anchor('pelvis');
@@ -238,7 +313,7 @@ export class World {
   }
 
   rigTarget(): Vector3 {
-    return new Vector3(3.15, 0.92, 0.25);
+    return RIG_PIVOT.clone().add(new Vector3(0.05, -0.1, 0.14));
   }
 
   // ─────────────────────────── covers, isolation, highlight ───────────────────────────
@@ -270,6 +345,9 @@ export class World {
       const hidden = this.assemblyHides(rm);
       let g = this.isCover(rm) ? x : 0;
       if (focus && !focus.includes(rm.sub)) g = Math.max(g, iso * (this.isCover(rm) ? 1 : 0.92));
+      // an opened cover is out of the way: it only fades as it lifts off
+      const op = this.openings.opening(rm.part);
+      if (op > 0) g = g * (1 - op) + 0.55 * op;
       c.g = g;
       if (hidden) {
         rm.mesh.visible = false;
@@ -361,7 +439,7 @@ export class World {
 
   // ─────────────────────────── frame ───────────────────────────
 
-  step(dt: number) {
+  step(dt: number, render = true) {
     this.ch.update(dt);
     this.updateHighlight(dt);
     // gaze
@@ -373,14 +451,22 @@ export class World {
     this.lab.moveBelt(this.walk.beltNow - this.lab.beltOffset);
     this.applyCovers();
     this.updateAssemblies(dt);
+    this.limits.update();
+    const src = this.driver.source;
+    this.overlays.push = src === this.balance ? this.balance.pushArrow : null;
+    this.overlays.extra = src === this.manip ? this.manip.forces : [];
     for (const f of this.features) f.update(this, dt);
     for (const cb of this.onFrame) cb(this, dt);
     if (time.now - this.readoutsAt > 0.1) {
       this.readoutsAt = time.now;
       publishReadouts(this);
     }
+    this.tour.update(dt);
     this.director.update(dt);
-    this.stage.render(dt);
+    if (render) {
+      this.stage.render(dt);
+      this.vision.renderInto(this);
+    }
   }
 
   resize(w: number, h: number) {

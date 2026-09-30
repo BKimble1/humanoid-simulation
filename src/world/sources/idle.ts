@@ -10,9 +10,9 @@ import { DIM, type JointId, type Side } from '../../spec/body';
 import { solveArm } from '../../engine/ik';
 import type { RobotModel } from '../../engine/robot';
 import { DEG, Kinematics, Pose } from '../../engine/skeleton';
-import { flatFoot, solvePosture } from '../../engine/wholebody';
+import { carryArms, flatFoot, solvePosture } from '../../engine/wholebody';
 import { handPoses, OPEN_HAND } from '../../scene/robot/hand';
-import type { FootPose, PoseSource } from '../pose';
+import type { FootPose, Held, PoseSource } from '../pose';
 
 export type IdlePreset = 'rest' | 'hero' | 'showHand' | 'lookCart' | 'ready' | 'armsOut' | 'clearArms';
 
@@ -57,6 +57,7 @@ export class IdleSource implements PoseSource {
   /** Arm target for the showHand preset (world), set by the scene. */
   handTarget = new Vector3(0.18, 1.2, 0.36);
   private armPose = new Pose();
+  held: Held | null = null;
 
   constructor(
     private model: () => RobotModel,
@@ -134,6 +135,15 @@ export class IdleSource implements PoseSource {
       upper.L_elbow = 24;
       upper.R_elbow = 24;
     }
+    // carrying the Engineer payload: a box held in both hands, everywhere the robot stands
+    const carrying = model.config.payload > 0;
+    if (carrying) {
+      Object.assign(upper, carryArms());
+      upper.L_elbow! += L * 0.8 * wander(t, 0.13, 3);
+      upper.R_elbow! += L * 0.8 * wander(t, 0.12, 4);
+      hp.L.fingers = [0.5, 0.5, 0.52, 0.54];
+      hp.R.fingers = [0.5, 0.5, 0.52, 0.54];
+    }
     // stance and COM sway
     const c = Math.cos(this.heading);
     const sn = Math.sin(this.heading);
@@ -152,8 +162,12 @@ export class IdleSource implements PoseSource {
       upper,
       iterations: 3,
     });
+    if (carrying) {
+      this.kin.update(this.pose);
+      this.held = { pos: this.kin.palm('L').add(this.kin.palm('R')).multiplyScalar(0.5), mass: model.config.payload, hands: 'both' };
+    } else this.held = null;
     // presented hand: the left arm reaches to a point in front of the chest, palm up
-    if (this.preset === 'showHand') {
+    if (this.preset === 'showHand' && !carrying) {
       this.pose.setDeg({ L_wrist_yaw: -70 });
       solveArm(this.pose, 'L', this.handTarget, this.kin, { iterations: 20 });
       hp.L.fingers = [0.1 + 0.55 * (0.5 + 0.5 * Math.sin(t * 0.9)), 0.12 + 0.55 * (0.5 + 0.5 * Math.sin(t * 0.9 - 0.4)), 0.14 + 0.55 * (0.5 + 0.5 * Math.sin(t * 0.9 - 0.8)), 0.16 + 0.55 * (0.5 + 0.5 * Math.sin(t * 0.9 - 1.2))];

@@ -60,7 +60,7 @@ export class MotionDynamics {
   }
 
   /** Feed the next pose (dt after the previous one) and its contacts. */
-  update(pose: Pose, dt: number, feet: FootContact[], payloadPos: Vector3 | null = null): DynamicsResult {
+  update(pose: Pose, dt: number, feet: FootContact[], payloadPos: Vector3 | null = null, payloadMass = this.model.config.payload, hands: 'both' | 'L' | 'R' = 'both'): DynamicsResult {
     const kin = this.kin.update(pose);
     const coms = this.model.segmentComs(kin);
     this.hist.push({ q: Float64Array.from(pose.q), coms, payload: payloadPos?.clone() ?? null });
@@ -96,7 +96,6 @@ export class MotionDynamics {
       com.addScaledVector(c, s.mass);
       mass += s.mass;
     }
-    const payloadMass = this.model.config.payload;
     const extra: { seg: SegmentId; mass: number; point: Vector3; acc?: Vector3 }[] = [];
     if (payloadMass > 0 && payloadPos) {
       const f = new Vector3().copy(payAcc ?? new Vector3()).sub(g).multiplyScalar(payloadMass);
@@ -106,7 +105,8 @@ export class MotionDynamics {
       mass += payloadMass;
       // Held between the palms: the box is a rigid bridge, so each hand carries half the load
       // at its own palm (same total force and moment as the box's weight at its centre).
-      extra.push({ seg: 'L_hand', mass: payloadMass / 2, point: kin.palm('L'), acc: payAcc }, { seg: 'R_hand', mass: payloadMass / 2, point: kin.palm('R'), acc: payAcc });
+      if (hands === 'both') extra.push({ seg: 'L_hand', mass: payloadMass / 2, point: kin.palm('L'), acc: payAcc }, { seg: 'R_hand', mass: payloadMass / 2, point: kin.palm('R'), acc: payAcc });
+      else extra.push({ seg: `${hands}_hand`, mass: payloadMass, point: payloadPos.clone(), acc: payAcc });
     }
     r.com.copy(com).divideScalar(mass);
     r.totalForce.copy(F);

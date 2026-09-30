@@ -14,6 +14,7 @@ import { convexHull, signedDistance, type P2 } from '../../engine/balance';
 import { MotionDynamics, type DynamicsResult, type FootContact } from '../../engine/motionDynamics';
 import { NJ } from '../../engine/skeleton';
 import type { Feature, World } from '../world';
+import type { Held } from '../pose';
 
 export class BodyState implements Feature {
   com = new Vector3();
@@ -29,8 +30,8 @@ export class BodyState implements Feature {
   zmp = new Vector3();
   private md: MotionDynamics | null = null;
   private modelRef: unknown = null;
-  /** Payload position (world) when carrying, set by sources. */
-  payload: Vector3 | null = null;
+  /** What the robot holds now (from the active source). */
+  held: Held | null = null;
   /** Energy stepping scale (thermal demos speed heating up). */
   thermalScale = 1;
 
@@ -38,7 +39,11 @@ export class BodyState implements Feature {
     if (dt <= 0) return;
     const kin = w.kin;
     kin.update(w.driver.out);
-    const c = w.model.com(kin, this.payload ?? undefined);
+    const src = w.driver.source;
+    this.held = src?.held ?? null;
+    this.thermalScale = src?.thermalScale ?? 1;
+    const held = this.held;
+    const c = w.model.com(kin, held?.pos, new Vector3(), held ? held.mass : 0);
     this.com.copy(c);
     if (this.prevCom) {
       const v = c.clone().sub(this.prevCom).divideScalar(dt);
@@ -76,7 +81,7 @@ export class BodyState implements Feature {
       this.md = new MotionDynamics(w.model);
       this.modelRef = w.model;
     }
-    const r = this.md.update(w.driver.out, Math.max(1 / 240, dt), feet, this.payload);
+    const r = this.md.update(w.driver.out, Math.max(1 / 240, dt), feet, held?.pos ?? null, held ? held.mass : 0, held?.hands ?? 'both');
     // smooth the finite-difference noise of rendered frames
     const k = Math.min(1, dt * 10);
     for (let i = 0; i < NJ; i++) {

@@ -106,6 +106,8 @@ export function syncAddress() {
     const url = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`;
     if (url !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.replaceState(window.history.state, '', url);
   };
+  // a link that implies a place (?system=power) is written out in full (?mode=explore&system=power)
+  write(useApp.getState());
   return useApp.subscribe((s, prev) => {
     if (s.mode !== prev.mode || s.system !== prev.system || s.lab !== prev.lab) write(s);
   });

@@ -187,3 +187,25 @@ test('the framing follows the layout: orientation changes and the phone sheet ke
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test('with reduced motion, camera moves are short and scene changes quick', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open(page, 'mode=explore&system=overview');
+  await settle(page);
+  await page.evaluate(() => (window as unknown as { __fabTelemetry: { start(): void } }).__fabTelemetry.start());
+  await go(page, { mode: 'explore', system: 'hands' });
+  await advance(page, 30);
+  await go(page, { mode: 'explore', system: 'actuators', exploded: true });
+  await advance(page, 60);
+  await go(page, { mode: 'simulate', lab: 'walk', exploded: false });
+  await advance(page, 60);
+  const t = await page.evaluate(() => {
+    const w = window as unknown as { __fabTelemetry: { events: { kind: string; detail?: string }[] }; __fab: { ch: { speed: number } } };
+    return { moves: w.__fabTelemetry.events.filter((e) => e.kind === 'camera-move').map((e) => Number(e.detail!.split(' ')[1])), speed: w.__fab.ch.speed };
+  });
+  expect(t.moves.length).toBeGreaterThanOrEqual(3);
+  expect(Math.max(...t.moves), 'camera moves at most 0.5 s').toBeLessThanOrEqual(0.5);
+  expect(t.speed, 'channel changes about three times quicker').toBeLessThan(0.5);
+  expect(errors).toEqual([]);
+});

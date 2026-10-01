@@ -10,4 +10,4 @@ clip-actuator: 425 frames, 1257 s, errors 0
   sole min m              -0.000@185(explore.actuators.open) -0.000@271(explore.actuators.open) -0.000@44(explore.actuators.open)
   object speed max m/s    0.000@1(explore.actuators) 0.000@2(explore.actuators) 0.000@3(explore.actuators)
   attach err max m        -1.000@1(explore.actuators) -1.000@2(explore.actuators) -1.000@3(explore.actuators)
-  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-actuator.mp4
+  video: docs/recordings/v1/clip-actuator.mp4

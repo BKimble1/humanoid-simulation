@@ -10,4 +10,4 @@ clip-hands: 330 frames, 412 s, errors 0
   sole min m              -0.000@312(explore.forces) -0.000@67(explore.hands) -0.000@306(explore.forces)
   object speed max m/s    0.000@1(explore.overview) 0.000@2(explore.overview) 0.000@3(explore.overview)
   attach err max m        -1.000@1(explore.overview) -1.000@2(explore.overview) -1.000@3(explore.overview)
-  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-hands.mp4
+  video: docs/recordings/v1/clip-hands.mp4

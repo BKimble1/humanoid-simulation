@@ -1,0 +1,14 @@
+clip-hands: 330 frames, 861 s, errors 0
+  joint speed max rad/s   2.398@155(explore.actuators,blend) 2.396@62(explore.hands,blend) 2.396@61(explore.hands,blend)
+  joint accel max rad/s²  19.480@47(explore.hands,blend) 7.586@164(explore.actuators,blend) 7.586@147(explore.actuators,blend)
+  hand rate max 1/s       1.073@155(explore.actuators,blend) 1.069@156(explore.actuators,blend) 1.057@154(explore.actuators,blend)
+  pelvis speed max m/s    0.032@250(explore.forces,blend) 0.032@249(explore.forces,blend) 0.031@251(explore.forces,blend)
+  camera speed max m/s    6.085@69(explore.hands,blend) 6.066@70(explore.hands,blend) 6.063@68(explore.hands,blend)
+  camera accel max m/s²   16.489@29(explore.overview) 16.346@30(explore.overview) 15.535@28(explore.overview)
+  camera clearance min m  1.000@150(explore.actuators,blend) 1.001@151(explore.actuators,blend) 1.005@149(explore.actuators,blend)
+  sole slip max m/s       0.000@82(explore.hands) 0.000@145(explore.actuators,blend) 0.000@144(explore.actuators,blend)
+  sole min m              -0.000@14(explore.overview,blend) -0.000@154(explore.actuators,blend) -0.000@17(explore.overview,blend)
+  object speed max m/s    0.000@1(explore.overview,blend) 0.000@2(explore.overview,blend) 0.000@3(explore.overview,blend)
+  attach err max m        -1.000@1(explore.overview,blend) -1.000@2(explore.overview,blend) -1.000@3(explore.overview,blend)
+  events: camera-move@0 camera-move@45 camera-move@140 camera-move@235
+  video: docs/recordings/v2/phone/clip-hands.mp4

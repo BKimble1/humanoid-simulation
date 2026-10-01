@@ -10,4 +10,4 @@ clip-manip: 450 frames, 2281 s, errors 0
   sole min m              -0.000@318(sim.manipulation) -0.000@332(sim.manipulation) -0.000@300(sim.manipulation)
   object speed max m/s    4.685@185(sim.manipulation) 4.665@186(sim.manipulation) 4.177@302(sim.manipulation)
   attach err max m        0.000@167(sim.manipulation) 0.000@168(sim.manipulation) 0.000@169(sim.manipulation)
-  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-manip.mp4
+  video: docs/recordings/v1/clip-manip.mp4

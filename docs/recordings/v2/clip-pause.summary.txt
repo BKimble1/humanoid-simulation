@@ -1,0 +1,14 @@
+clip-pause: 315 frames, 691 s, errors 0
+  joint speed max rad/s   7.488@62(sim.walk) 6.610@63(sim.walk) 6.458@275(sim.walk)
+  joint accel max rad/s²  192.355@246(sim.walk) 160.208@156(sim.walk) 150.557@279(sim.walk)
+  hand rate max 1/s       0.081@20(sim.walk,blend) 0.081@21(sim.walk,blend) 0.079@19(sim.walk,blend)
+  pelvis speed max m/s    0.478@313(intro) 0.475@314(intro) 0.461@315(intro)
+  camera speed max m/s    4.356@32(sim.walk,blend) 4.347@31(sim.walk,blend) 4.336@33(sim.walk,blend)
+  camera accel max m/s²   8.841@46(sim.walk) 8.788@45(sim.walk) 8.734@47(sim.walk)
+  camera clearance min m  4.563@2(intro,blend) 4.563@1(intro,blend) 4.563@3(intro,blend)
+  sole slip max m/s       0.012@264(sim.walk) 0.012@102(sim.walk) 0.006@47(sim.walk)
+  sole min m              -0.000@61(sim.walk) -0.000@295(sim.walk) -0.000@133(sim.walk)
+  object speed max m/s    0.000@1(intro,blend) 0.000@2(intro,blend) 0.000@3(intro,blend)
+  attach err max m        -1.000@1(intro,blend) -1.000@2(intro,blend) -1.000@3(intro,blend)
+  events: chapter-reset@0 chapter-reset@5 camera-move@5 chapter-reset@305 camera-move@305
+  video: docs/recordings/v2/clip-pause.mp4

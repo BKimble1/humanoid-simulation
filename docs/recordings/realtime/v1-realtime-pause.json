@@ -1,0 +1,9 @@
+{
+  "url": "http://127.0.0.1:4181",
+  "paused_s": 5.663100000000559,
+  "changeWhilePaused": 0.5006817881332698,
+  "beltWhilePaused_m": 0.004211274978084757,
+  "tourClockWhilePaused_s": 0,
+  "afterPlay_s": 2.543299999999814,
+  "tourClockAfterPlay_s": 0.3980333333335196
+}

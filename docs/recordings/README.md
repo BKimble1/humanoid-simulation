@@ -9,8 +9,9 @@ frame (`*.telemetry.json`, `src/world/telemetry.ts`) and its summary (`*.summary
 | folder | build |
 |---|---|
 | `v1/` | V1 (`f5fa839`, branch `claude/fab-one-humanoid`) with the observation-only telemetry of `5ed76b7` added, built and served on its own |
-| `v2/` | V2 at `fb3324c` (branch `claude/humanoid-v2`), production build |
-| `v2/phone/` | the same V2 build at 390 × 844 with touch (phone) |
+| `v2/` | V2 (branch `claude/humanoid-v2`), production builds: `clip-hands`, `clip-actuator`, `clip-manip`, `clip-walk` from `f861fff`; `clip-pause` from `2ab9418` (they differ only in when the first framing happens after load, which shows at the start of `clip-pause`) |
+| `v2/phone/` | `2ab9418` at 390 × 844 with touch (phone) |
+| `realtime/` | the Watch pause in real time, V1 (port of the V1 build) and V2 (`2ab9418`): the page's own frame loop recorded as a screen video, with what changed while paused (`scripts/realtime-pause.mjs`, 960 × 540, `quality=low`; the software renderer draws about one frame a second, so the videos are choppy). V1: the pose and camera moved and the belt ran 4.2 mm during 5.7 s of pause; V2: nothing changed in 4.0 s |
 | `compare/` | V1 and V2 side by side, frame for frame (`scripts/side-by-side.mjs`) |
 
 [`COMPARISON.md`](COMPARISON.md) lists the worst frame of each measurement in each scenario,

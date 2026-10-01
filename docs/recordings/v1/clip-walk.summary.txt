@@ -10,4 +10,4 @@ clip-walk: 370 frames, 2291 s, errors 0
   sole min m              -0.000@169(sim.walk) -0.000@140(sim.walk) -0.000@212(sim.walk)
   object speed max m/s    0.000@1(sim.walk,blend) 0.000@2(sim.walk,blend) 0.000@3(sim.walk,blend)
   attach err max m        -1.000@1(sim.walk,blend) -1.000@2(sim.walk,blend) -1.000@3(sim.walk,blend)
-  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-walk.mp4
+  video: docs/recordings/v1/clip-walk.mp4

@@ -268,14 +268,25 @@ continuous and honest. None of it changes a computed value.
 - **Tour chapters** start from a baseline: the default design and lab settings plus the chapter's
   own, the charge and temperatures the tour started with. Timed actions fire once per visit.
   Leaving restores the visitor's design, settings, actuator, charge and temperatures.
+- **Stepping.** Every stepping foot (stance steps, the balance lab's return and recovery steps,
+  a blend's foot lift) rises and lands on a `sin²` arc: no vertical speed at lift-off or
+  touchdown. While the weight moves off a foot that is far out, the pelvis lowers softly before
+  that knee straightens past 20° (it never snaps straight). A push recovery's drawn torso lean
+  and arm swing follow the recovery model through fast springs: the model stops its torso at
+  its rotation limit in one step, which drawn directly would be a pop.
+- **Arm IK.** Arms that track a moving target frame by frame (manipulation) start each solve
+  from the previous solution and resolve their redundancy toward where they already are, so
+  the solution moves continuously with the target.
 - **Camera** (`scene/camera/director.ts`). Moves are quintic from the current position and
   velocity (the carried velocity bounded so it cannot throw the path wide). The robot is
   approximated by capsules (torso, head, limbs, hands); each move's path is checked against them
   and swings out as little as needed, and a soft avoidance keeps a moving robot off the lens.
   A shot frames a subject box: on phones its distance and lens shift come from the part of the
-  view the header, panel or sheet and caption bar leave free (measured from the page), so a
-  collapsed sheet or a turned phone reframes it; on larger screens the composed shot stands
-  when the subject fits. Follow shots track a filtered anchor, not the robot's millimetre sway.
+  view the header, panel or sheet and caption bar leave free (measured from the page and
+  followed by a spring, so a layout change reframes smoothly, even mid-move), so a collapsed
+  sheet, a turned phone or a longer caption reframes it; on larger screens the composed shot
+  stands when the subject fits. A move's duration comes from how far the camera travels (for
+  a planned 8 m/s²) and how far the view turns: mostly 0.8–1.8 s. Follow shots track a filtered anchor, not the robot's millimetre sway.
 - **Actuator hand-over.** With an actuator open, choosing another closes the open one, moves
   the camera, then reveals the new one (interruptible: choosing the first again reverses).
 - **Evidence.** Developer telemetry (`world/telemetry.ts`, test hooks only) measures every frame:

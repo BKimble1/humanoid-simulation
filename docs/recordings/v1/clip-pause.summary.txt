@@ -10,4 +10,4 @@ clip-pause: 315 frames, 480 s, errors 0
   sole min m              -0.000@61(sim.walk) -0.000@277(sim.walk) -0.000@205(sim.walk)
   object speed max m/s    0.000@1(intro) 0.000@2(intro) 0.000@3(intro)
   attach err max m        -1.000@1(intro) -1.000@2(intro) -1.000@3(intro)
-  video: /tmp/claude-0/-home-user/f65a88ef-881e-5617-919d-cb005c2a7538/scratchpad/v1clips/clip-pause.mp4
+  video: docs/recordings/v1/clip-pause.mp4

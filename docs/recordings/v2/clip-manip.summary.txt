@@ -1,0 +1,14 @@
+clip-manip: 450 frames, 1580 s, errors 0
+  joint speed max rad/s   1.673@161(sim.manipulation) 1.659@160(sim.manipulation) 1.638@162(sim.manipulation)
+  joint accel max rad/s²  10.942@105(sim.manipulation) 10.513@167(sim.manipulation) 8.333@169(sim.manipulation)
+  hand rate max 1/s       3.099@353(sim.manipulation) 3.090@352(sim.manipulation) 2.878@182(sim.manipulation)
+  pelvis speed max m/s    0.063@392(sim.manipulation) 0.063@393(sim.manipulation) 0.063@391(sim.manipulation)
+  camera speed max m/s    4.986@30(sim.manipulation,blend) 4.980@31(sim.manipulation) 4.972@29(sim.manipulation,blend)
+  camera accel max m/s²   8.118@14(sim.manipulation,blend) 8.083@13(sim.manipulation,blend) 8.075@15(sim.manipulation,blend)
+  camera clearance min m  1.874@146(sim.manipulation) 1.874@147(sim.manipulation) 1.874@145(sim.manipulation)
+  sole slip max m/s       0.000@207(sim.manipulation) 0.000@170(sim.manipulation) 0.000@364(sim.manipulation)
+  sole min m              -0.000@258(sim.manipulation) -0.000@263(sim.manipulation) -0.000@107(sim.manipulation)
+  object speed max m/s    0.226@212(sim.manipulation) 0.226@213(sim.manipulation) 0.224@211(sim.manipulation)
+  attach err max m        0.000@193(sim.manipulation) 0.000@194(sim.manipulation) 0.000@195(sim.manipulation)
+  events: camera-move@0
+  video: docs/recordings/v2/clip-manip.mp4

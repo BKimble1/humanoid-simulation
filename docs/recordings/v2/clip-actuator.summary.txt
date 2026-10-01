@@ -1,0 +1,14 @@
+clip-actuator: 425 frames, 2441 s, errors 0
+  joint speed max rad/s   0.701@14(explore.actuators,blend) 0.693@13(explore.actuators,blend) 0.693@15(explore.actuators,blend)
+  joint accel max rad/s²  3.667@3(explore.actuators,blend) 3.262@4(explore.actuators,blend) 2.980@5(explore.actuators,blend)
+  hand rate max 1/s       0.030@2(explore.actuators,blend) 0.030@3(explore.actuators,blend) 0.029@4(explore.actuators,blend)
+  pelvis speed max m/s    0.033@13(explore.actuators,blend) 0.033@12(explore.actuators,blend) 0.032@14(explore.actuators,blend)
+  camera speed max m/s    3.744@20(explore.actuators,blend) 3.731@21(explore.actuators,blend) 3.724@19(explore.actuators,blend)
+  camera accel max m/s²   9.055@9(explore.actuators,blend) 9.037@10(explore.actuators,blend) 8.823@8(explore.actuators,blend)
+  camera clearance min m  0.894@65(explore.actuators.open) 0.894@66(explore.actuators.open) 0.894@67(explore.actuators.open)
+  sole slip max m/s       0.000@281(explore.actuators.open) 0.000@282(explore.actuators.open) 0.000@347(explore.actuators.open)
+  sole min m              -0.000@97(explore.actuators.open) -0.000@234(explore.actuators.open) -0.000@237(explore.actuators.open)
+  object speed max m/s    0.000@1(explore.actuators,blend) 0.000@2(explore.actuators,blend) 0.000@3(explore.actuators,blend)
+  attach err max m        -1.000@1(explore.actuators,blend) -1.000@2(explore.actuators,blend) -1.000@3(explore.actuators,blend)
+  events: camera-move@0 camera-move@40 camera-move@185 actuator-subject@194
+  video: docs/recordings/v2/clip-actuator.mp4

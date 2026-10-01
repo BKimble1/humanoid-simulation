@@ -66,5 +66,6 @@ console.log(JSON.stringify(result, null, 2));
 writeFileSync(join(out, `${name}.json`), JSON.stringify(result, null, 2));
 await ctx.close();
 await browser.close();
-const v = readdirSync(out).filter((f) => f.endsWith('.webm') && !f.startsWith(name));
-if (v.length) renameSync(join(out, v[v.length - 1]), join(out, `${name}.webm`));
+// Playwright names the recording with a hash: give this run's its name
+const v = readdirSync(out).filter((f) => /^[0-9a-f]{32}\.webm$/.test(f));
+if (v.length === 1) renameSync(join(out, v[0]), join(out, `${name}.webm`));

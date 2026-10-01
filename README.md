@@ -80,7 +80,8 @@ actuator switches, pick and place, walking and hand-overs, rapid changes, energy
 frame rates), `e2e/watch.spec.ts` (pause in frame-stepped and real time, chapter baselines,
 navigation, leaving) and `e2e/camera.spec.ts` (orbit, fling, cancel, pinch, IK drag, Recenter,
 framing that follows the layout). What they found in V1 is in `docs/V2-BASELINE.md`; how the
-motion is kept continuous is in `docs/ENGINEERING.md`, section 9.
+motion is kept continuous is in `docs/ENGINEERING.md`, section 9; what V2 changed, the tests run
+and the measurements are in `docs/RELEASE-V2.md`, with V1 and V2 recordings in `docs/recordings/`.
 
 ## How it is built
 
